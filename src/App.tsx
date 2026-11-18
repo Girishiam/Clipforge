@@ -25,6 +25,13 @@ import {
 } from './services/storage';
 import { exportClipsToCSV } from './utils/timecode';
 import { 
+  HeroFilmstripGraphic, 
+  FeatureIngestGraphic, 
+  FeaturePrecisionGraphic, 
+  FeaturePrivacyGraphic, 
+  EmptyShelfGraphic 
+} from './components/AestheticGraphics';
+import { 
   Plus, 
   RefreshCw, 
   Link as LinkIcon, 
@@ -445,6 +452,11 @@ export const App: React.FC = () => {
               </p>
             </div>
 
+            {/* Aesthetic Editorial Filmstrip & Caliper Illustration */}
+            <div className="pt-1 pb-2">
+              <HeroFilmstripGraphic />
+            </div>
+
             <UniversalUrlInput 
               onSourceLoaded={handleSourceLoaded}
               autoFocus={true}
@@ -580,8 +592,8 @@ export const App: React.FC = () => {
               onExportCSV={handleExportCSV}
             />
           ) : (
-            <div className="bg-surface-card border border-stone rounded-lg p-6 sm:p-8 text-center text-olive space-y-2">
-              <Scissors className="w-6 h-6 text-coral mx-auto" />
+            <div className="bg-surface-card border border-stone rounded-lg p-6 sm:p-10 text-center text-olive space-y-3 shadow-minimal">
+              <EmptyShelfGraphic />
               <p className="text-sm font-semibold text-botanical">No clips added to shelf yet</p>
               <p className="text-xs text-olive max-w-sm mx-auto">
                 Set your start and end timeframe in the controls above and click &quot;+ Add Range&quot; to save clips from this video.
@@ -638,34 +650,43 @@ export const App: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
-            <div className="bg-surface-card border border-stone rounded-lg p-5 space-y-2 shadow-minimal">
-              <div className="w-8 h-8 rounded bg-surface border border-stone flex items-center justify-center text-coral mb-3 font-mono font-bold text-xs">
-                01
+            <div className="bg-surface-card border border-stone rounded-lg p-5 space-y-3 shadow-minimal flex flex-col justify-between">
+              <div>
+                <FeatureIngestGraphic className="w-full h-24 mb-3" />
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="px-1.5 py-0.5 rounded bg-surface border border-stone text-[10px] font-mono font-bold text-coral">01</span>
+                  <h4 className="font-heading font-bold text-sm text-botanical">Instant Auto-Preview</h4>
+                </div>
+                <p className="text-xs text-olive leading-relaxed">
+                  Paste any YouTube, Instagram, or Facebook link. ClipForge immediately parses the media and initializes playback with zero required setup.
+                </p>
               </div>
-              <h4 className="font-heading font-bold text-sm text-botanical">Instant Auto-Preview</h4>
-              <p className="text-xs text-olive leading-relaxed">
-                Paste any YouTube, Instagram, or Facebook link. ClipForge immediately parses the media and initializes playback with zero required setup.
-              </p>
             </div>
 
-            <div className="bg-surface-card border border-stone rounded-lg p-5 space-y-2 shadow-minimal">
-              <div className="w-8 h-8 rounded bg-surface border border-stone flex items-center justify-center text-coral mb-3 font-mono font-bold text-xs">
-                02
+            <div className="bg-surface-card border border-stone rounded-lg p-5 space-y-3 shadow-minimal flex flex-col justify-between">
+              <div>
+                <FeaturePrecisionGraphic className="w-full h-24 mb-3" />
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="px-1.5 py-0.5 rounded bg-surface border border-stone text-[10px] font-mono font-bold text-coral">02</span>
+                  <h4 className="font-heading font-bold text-sm text-botanical">Millisecond Boundaries</h4>
+                </div>
+                <p className="text-xs text-olive leading-relaxed">
+                  Type exact timestamps like 57:58 or 1.01.58, click one-touch presets (15s, 30s, 60s), or scrub with visual handles on the interactive timeline.
+                </p>
               </div>
-              <h4 className="font-heading font-bold text-sm text-botanical">Millisecond Boundaries</h4>
-              <p className="text-xs text-olive leading-relaxed">
-                Type exact timestamps like 57:58 or 1.01.58, click one-touch presets (15s, 30s, 60s), or scrub with visual handles on the interactive timeline.
-              </p>
             </div>
 
-            <div className="bg-surface-card border border-stone rounded-lg p-5 space-y-2 shadow-minimal">
-              <div className="w-8 h-8 rounded bg-surface border border-stone flex items-center justify-center text-coral mb-3 font-mono font-bold text-xs">
-                03
+            <div className="bg-surface-card border border-stone rounded-lg p-5 space-y-3 shadow-minimal flex flex-col justify-between">
+              <div>
+                <FeaturePrivacyGraphic className="w-full h-24 mb-3" />
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="px-1.5 py-0.5 rounded bg-surface border border-stone text-[10px] font-mono font-bold text-coral">03</span>
+                  <h4 className="font-heading font-bold text-sm text-botanical">Zero Cloud Privacy</h4>
+                </div>
+                <p className="text-xs text-olive leading-relaxed">
+                  Processing runs 100% on your device using client-side WebAssembly and HTML5 Canvas. Your raw media is never uploaded to any remote server.
+                </p>
               </div>
-              <h4 className="font-heading font-bold text-sm text-botanical">Zero Cloud Privacy</h4>
-              <p className="text-xs text-olive leading-relaxed">
-                Processing runs 100% on your device using client-side WebAssembly and HTML5 Canvas. Your raw media is never uploaded to any remote server.
-              </p>
             </div>
           </div>
         </section>
