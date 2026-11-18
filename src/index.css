@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-ivory: #FAF8F2;
+    --accent-coral: #FE5936;
+    --accent-coral-hover: #E24523;
+    --accent-lime: #C9E865;
+    --text-botanical: #202822;
+    --bg-card: #FFFFFF;
+    --border-stone: #E8E3D8;
+    --text-olive: #6B7169;
+    --surface-neutral: #F1EFE8;
+    --status-forest: #3C7458;
+    --status-crimson: #C4493F;
+  }
+
+  body {
+    background-color: var(--bg-ivory);
+    color: var(--text-botanical);
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  /* Custom subtle scrollbar with no gradients */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #FAF8F2;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #E8E3D8;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #6B7169;
+  }
+
+  /* Tabular numbers for all monospace timecodes */
+  .font-mono {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-feature-settings: "tnum" 1, "zero" 1;
+  }
+}
+
+/* Subtle focus rings */
+input:focus, button:focus-visible, select:focus, textarea:focus {
+  outline: 2px solid #FE5936;
+  outline-offset: 1px;
+}

@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" fill="none">
+  <!-- Warm Ivory Background -->
+  <rect width="1200" height="630" fill="#FAF8F2"/>
+  
+  <!-- Subtle Outer Stone Border -->
+  <rect x="24" y="24" width="1152" height="582" rx="16" fill="#FFFFFF" stroke="#E8E3D8" stroke-width="2"/>
+  
+  <!-- Header Bar -->
+  <g transform="translate(70, 75)">
+    <!-- App Icon -->
+    <rect width="56" height="56" rx="12" fill="#202822"/>
+    <rect x="11" y="13" width="34" height="30" rx="5" fill="#FAF8F2"/>
+    <rect x="20" y="22" width="16" height="12" rx="2" fill="#C9E865"/>
+    <path d="M23 20L33 36M33 20L23 36" stroke="#FE5936" stroke-width="3" stroke-linecap="round"/>
+    
+    <!-- Brand Title -->
+    <text x="74" y="32" font-family="'Manrope', 'Plus Jakarta Sans', sans-serif" font-weight="800" font-size="28" fill="#202822" letter-spacing="-0.03em">ClipForge</text>
+    <text x="74" y="50" font-family="'IBM Plex Mono', monospace" font-weight="600" font-size="13" fill="#6B7169" letter-spacing="0.1em">VIDEO CLIPPING STUDIO</text>
+    
+    <!-- Status Pill -->
+    <rect x="890" y="8" width="170" height="36" rx="8" fill="#F1EFE8" stroke="#E8E3D8"/>
+    <circle cx="910" cy="26" r="4" fill="#3C7458"/>
+    <text x="924" y="31" font-family="'IBM Plex Mono', monospace" font-weight="600" font-size="12" fill="#202822">VERCEL READY</text>
+  </g>
+
+  <!-- Hero Typography -->
+  <g transform="translate(70, 195)">
+    <text font-family="'Manrope', 'Plus Jakarta Sans', sans-serif" font-weight="800" font-size="52" fill="#202822" letter-spacing="-0.03em">
+      Precision timeframe clipping.
+    </text>
+    <text y="64" font-family="'Manrope', 'Plus Jakarta Sans', sans-serif" font-weight="800" font-size="52" fill="#FE5936" letter-spacing="-0.03em">
+      Fast, private, zero-loss export.
+    </text>
+    <text y="125" font-family="'Inter', sans-serif" font-weight="500" font-size="20" fill="#6B7169">
+      Extract multiple custom ranges from any video with millisecond accuracy. No cloud uploads.
+    </text>
+  </g>
+
+  <!-- Editorial Timeline UI Mockup -->
+  <g transform="translate(70, 395)">
+    <!-- Container Card -->
+    <rect width="1060" height="135" rx="10" fill="#FAF8F2" stroke="#E8E3D8" stroke-width="2"/>
+    
+    <!-- Timecode Header -->
+    <text x="24" y="32" font-family="'IBM Plex Mono', monospace" font-weight="600" font-size="14" fill="#6B7169">START TIME: <tspan fill="#202822" font-weight="700">00:01:24.500</tspan></text>
+    <text x="320" y="32" font-family="'IBM Plex Mono', monospace" font-weight="600" font-size="14" fill="#6B7169">END TIME: <tspan fill="#202822" font-weight="700">00:02:48.250</tspan></text>
+    <text x="830" y="32" font-family="'IBM Plex Mono', monospace" font-weight="700" font-size="14" fill="#3C7458">DURATION: 00:01:23.750</text>
+    
+    <!-- Timeline Track -->
+    <rect x="24" y="48" width="1012" height="60" rx="6" fill="#FFFFFF" stroke="#E8E3D8"/>
+    
+    <!-- Waveform ticks -->
+    <g stroke="#E8E3D8" stroke-width="1.5">
+      <line x1="80" y1="62" x2="80" y2="94"/>
+      <line x1="140" y1="65" x2="140" y2="91"/>
+      <line x1="200" y1="58" x2="200" y2="98"/>
+      <line x1="260" y1="68" x2="260" y2="88"/>
+      <line x1="680" y1="60" x2="680" y2="96"/>
+      <line x1="740" y1="64" x2="740" y2="92"/>
+      <line x1="800" y1="58" x2="800" y2="98"/>
+      <line x1="860" y1="66" x2="860" y2="90"/>
+      <line x1="920" y1="62" x2="920" y2="94"/>
+    </g>
+
+    <!-- Lime Selected Range -->
+    <rect x="320" y="48" width="340" height="60" fill="#C9E865" opacity="0.85"/>
+    
+    <!-- Coral In Handle -->
+    <rect x="317" y="48" width="6" height="60" rx="2" fill="#FE5936"/>
+    <polygon points="314,44 326,44 320,52" fill="#FE5936"/>
+
+    <!-- Coral Out Handle -->
+    <rect x="657" y="48" width="6" height="60" rx="2" fill="#FE5936"/>
+    <polygon points="654,44 666,44 660,52" fill="#FE5936"/>
+
+    <!-- Playhead Needle -->
+    <rect x="440" y="46" width="3" height="64" fill="#202822"/>
+    <rect x="436.5" y="42" width="10" height="10" fill="#FE5936" transform="rotate(45 441.5 47)"/>
+  </g>
+
+  <!-- Footer Pills -->
+  <g transform="translate(70, 560)">
+    <text font-family="'IBM Plex Mono', monospace" font-size="12" font-weight="600" fill="#6B7169">
+      SUPPORTED: YOUTUBE • INSTAGRAM • FACEBOOK • DIRECT MP4 • LOCAL FILES • METADATA SANITIZED
+    </text>
+  </g>
+</svg>
