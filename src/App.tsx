@@ -1,24 +1,19 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
-  NavigationTab, 
   ClipSource, 
   ClipRange, 
   ExportPreset, 
   ExportJob, 
   Project 
 } from './types';
-import { Sidebar } from './components/Sidebar';
-import { Header } from './components/Header';
+import { Navbar } from './components/Navbar';
 import { UniversalUrlInput } from './components/UniversalUrlInput';
 import { VideoPlayer } from './components/VideoPlayer';
 import { Timeline } from './components/Timeline';
 import { TimeframeControls } from './components/TimeframeControls';
 import { ClipCollectionTable } from './components/ClipCollectionTable';
-import { BulkTimeframeModal } from './components/BulkTimeframeModal';
 import { ExportQueueView } from './components/ExportQueueView';
-import { BatchClipperView } from './components/BatchClipperView';
-import { SavedClipsView } from './components/SavedClipsView';
-import { SettingsView } from './components/SettingsView';
+import { BulkTimeframeModal } from './components/BulkTimeframeModal';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { ShareablePlanningModal } from './components/ShareablePlanningModal';
 import { executeClipExport } from './services/clippingEngine';
@@ -26,10 +21,23 @@ import {
   getAllProjects, 
   saveProject, 
   saveExportedClip, 
-  getStorageEstimate,
-  exportProjectManifest
+  getStorageEstimate 
 } from './services/storage';
 import { exportClipsToCSV } from './utils/timecode';
+import { 
+  Plus, 
+  RefreshCw, 
+  Link as LinkIcon, 
+  FileVideo, 
+  CheckCircle2, 
+  ShieldCheck, 
+  Scissors, 
+  Sparkles,
+  Zap,
+  Lock,
+  ChevronDown,
+  Layers
+} from 'lucide-react';
 
 const DEFAULT_PRESET: ExportPreset = {
   id: 'preset-default',
@@ -52,16 +60,11 @@ const INITIAL_PROJECT: Project = {
 };
 
 export const App: React.FC = () => {
-  // Navigation & Project
-  const [currentTab, setCurrentTab] = useState<NavigationTab>('home');
   const [currentProject, setCurrentProject] = useState<Project>(INITIAL_PROJECT);
-  const [storageUsage, setStorageUsage] = useState({ usedBytes: 0, totalBytes: 0, percentage: 0 });
-
-  // Mobile multi-view tab selector ('player' or 'table')
-  const [mobileMultiView, setMobileMultiView] = useState<'player' | 'table'>('player');
-
-  // Active Media & Timeframes
   const [activeSource, setActiveSource] = useState<ClipSource | null>(null);
+  const [isChangingVideo, setIsChangingVideo] = useState<boolean>(false);
+
+  // Timeframe & Player State
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [startTime, setStartTime] = useState<number>(0);
   const [endTime, setEndTime] = useState<number>(10);
@@ -71,6 +74,7 @@ export const App: React.FC = () => {
   // Queue & Presets
   const [exportJobs, setExportJobs] = useState<ExportJob[]>([]);
   const [currentPreset, setCurrentPreset] = useState<ExportPreset>(DEFAULT_PRESET);
+  const [showQueueSection, setShowQueueSection] = useState<boolean>(false);
 
   // Modals
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -78,16 +82,8 @@ export const App: React.FC = () => {
   const [isShareableModalOpen, setIsShareableModalOpen] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const clipsShelfRef = useRef<HTMLDivElement>(null);
   const activeAbortControllerRef = useRef<AbortController | null>(null);
-
-  // Refresh Storage Estimate
-  const refreshStorage = useCallback(() => {
-    getStorageEstimate().then(setStorageUsage);
-  }, []);
-
-  useEffect(() => {
-    refreshStorage();
-  }, [refreshStorage]);
 
   // Load existing project or set initial
   useEffect(() => {
@@ -126,13 +122,14 @@ export const App: React.FC = () => {
     }));
   };
 
-  // Add Source handler
+  // Add Source handler (triggered instantly when URL pasted or file dropped)
   const handleSourceLoaded = (newSource: ClipSource) => {
     setActiveSource(newSource);
     setDuration(newSource.duration);
     setStartTime(0);
     setEndTime(Math.min(newSource.duration, 10));
     setCurrentTime(0);
+    setIsChangingVideo(false);
 
     // Add to project sources if not present
     setCurrentProject((prev) => {
@@ -145,9 +142,6 @@ export const App: React.FC = () => {
         activeSourceId: newSource.id,
       };
     });
-
-    // Jump to Quick Clipper view on source load
-    setCurrentTab('quick');
   };
 
   // Timeframe handlers
@@ -185,13 +179,11 @@ export const App: React.FC = () => {
   const handlePreviewSelection = () => {
     handleSeek(startTime);
     if (videoRef.current) {
-      videoRef.current.currentTime = startTime;
       videoRef.current.play().catch(() => {});
     }
     try {
       const ytIframe = document.querySelector('#yt-player-target') as HTMLIFrameElement;
       if (ytIframe && ytIframe.contentWindow) {
-        ytIframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'seekTo', args: [startTime, true] }), '*');
         ytIframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*');
       }
     } catch {}
@@ -239,7 +231,7 @@ export const App: React.FC = () => {
     };
 
     setExportJobs((prev) => [newJob, ...prev]);
-    setCurrentTab('queue');
+    setShowQueueSection(true);
   };
 
   // Bulk Export Dispatcher
@@ -267,7 +259,7 @@ export const App: React.FC = () => {
     }));
 
     setExportJobs((prev) => [...newJobs, ...prev]);
-    setCurrentTab('queue');
+    setShowQueueSection(true);
   };
 
   // Export Clips to CSV
@@ -302,23 +294,29 @@ export const App: React.FC = () => {
     const abortController = new AbortController();
     activeAbortControllerRef.current = abortController;
 
-    executeClipExport(
-      videoRef.current,
-      nextJob,
-      (progress, logMsg) => {
-        setExportJobs((prev) =>
-          prev.map((j) => {
-            if (j.id === nextJob.id) {
-              const updatedLog = logMsg ? [...j.log, logMsg] : j.log;
-              return { ...j, progress, log: updatedLog };
-            }
-            return j;
-          })
+    const runExport = async () => {
+      try {
+        const result = await executeClipExport(
+          videoRef.current!,
+          nextJob,
+          (progress: number, message?: string) => {
+            setExportJobs((prev) =>
+              prev.map((j) =>
+                j.id === nextJob.id
+                  ? {
+                      ...j,
+                      progress,
+                      log: message ? [...j.log, message] : j.log,
+                    }
+                  : j
+              )
+            );
+          },
+          abortController.signal
         );
-      },
-      abortController.signal
-    )
-      .then(async (result) => {
+
+        const fileName = `${nextJob.clipName.replace(/[^a-z0-9_-]/gi, '_')}.${nextJob.preset.format}`;
+
         setExportJobs((prev) =>
           prev.map((j) =>
             j.id === nextJob.id
@@ -328,15 +326,14 @@ export const App: React.FC = () => {
                   progress: 100,
                   outputBlob: result.blob,
                   outputUrl: result.url,
-                  sizeBytes: result.sizeBytes,
-                  completedAt: Date.now(),
-                  log: [...j.log, `Render complete: Output size ${(result.sizeBytes / 1024 / 1024).toFixed(2)} MB`],
+                  outputFileName: fileName,
+                  log: [...j.log, `Render complete! Size: ${(result.sizeBytes / 1024 / 1024).toFixed(2)} MB`],
                 }
               : j
           )
         );
 
-        await saveExportedClip({
+        saveExportedClip({
           id: nextJob.id,
           clipName: nextJob.clipName,
           sourceTitle: nextJob.sourceTitle,
@@ -344,34 +341,42 @@ export const App: React.FC = () => {
           end: nextJob.end,
           duration: nextJob.duration,
           aspectRatio: nextJob.preset.aspectRatio,
-          format: result.format,
+          format: nextJob.preset.format,
           blob: result.blob,
           cleanMetadata: nextJob.preset.cleanMetadata,
-        });
+        }).catch(console.error);
 
-        refreshStorage();
-      })
-      .catch((err) => {
-        setExportJobs((prev) =>
-          prev.map((j) =>
-            j.id === nextJob.id
-              ? {
-                  ...j,
-                  status: 'error',
-                  error: err.message,
-                  log: [...j.log, `Error: ${err.message}`],
-                }
-              : j
-          )
-        );
-      });
-  }, [exportJobs, refreshStorage]);
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+          setExportJobs((prev) =>
+            prev.map((j) =>
+              j.id === nextJob.id ? { ...j, status: 'cancelled', log: [...j.log, 'Job cancelled by user.'] } : j
+            )
+          );
+        } else {
+          setExportJobs((prev) =>
+            prev.map((j) =>
+              j.id === nextJob.id
+                ? { ...j, status: 'error', error: err.message || 'Render failed', log: [...j.log, `Error: ${err.message}`] }
+                : j
+            )
+          );
+        }
+      } finally {
+        activeAbortControllerRef.current = null;
+      }
+    };
 
-  // Keyboard Shortcuts Listener
+    runExport();
+  }, [exportJobs]);
+
+  // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+        return;
+      }
 
       if (e.code === 'Space') {
         e.preventDefault();
@@ -379,20 +384,12 @@ export const App: React.FC = () => {
           if (videoRef.current.paused) videoRef.current.play().catch(() => {});
           else videoRef.current.pause();
         }
-      } else if (e.key === '[') {
-        setStartTime(currentTime);
-      } else if (e.key === ']') {
-        setEndTime(currentTime);
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        handleSeek(Math.max(0, currentTime - 5));
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        handleSeek(Math.min(duration, currentTime + 5));
-      } else if (e.key === ',') {
-        handleSeek(Math.max(0, currentTime - 1 / 30));
-      } else if (e.key === '.') {
-        handleSeek(Math.min(duration, currentTime + 1 / 30));
+      } else if (e.key === 'i' || e.key === 'I') {
+        const nextEnd = currentTime >= endTime ? currentTime + 5 : endTime;
+        handleRangeChange(currentTime, nextEnd);
+      } else if (e.key === 'o' || e.key === 'O') {
+        const nextStart = currentTime <= startTime ? Math.max(0, currentTime - 5) : startTime;
+        handleRangeChange(nextStart, currentTime);
       } else if (e.key === 'p' || e.key === 'P') {
         handlePreviewSelection();
       } else if (e.key === 'l' || e.key === 'L') {
@@ -406,286 +403,209 @@ export const App: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentTime, duration, currentClips]);
+  }, [currentTime, duration, currentClips, startTime, endTime]);
+
+  const scrollToClips = () => {
+    clipsShelfRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const activeJobsCount = exportJobs.filter((j) => j.status === 'queued' || j.status === 'processing').length;
 
   return (
-    <div className="flex h-screen bg-ivory font-sans text-botanical overflow-hidden select-none">
-      {/* Studio Editorial Sidebar (Desktop + Mobile Bottom Navigation) */}
-      <Sidebar
-        currentTab={currentTab}
-        onTabChange={setCurrentTab}
+    <div className="min-h-screen bg-ivory font-sans text-botanical flex flex-col selection:bg-coral selection:text-white">
+      {/* Editorial Landing Navbar */}
+      <Navbar
         activeSource={activeSource}
-        activeClipCount={currentClips.length}
-        queueCount={exportJobs.filter((j) => j.status === 'queued' || j.status === 'processing').length}
-        storageUsage={storageUsage}
+        clipCount={currentClips.length}
+        onNewVideo={() => {
+          setActiveSource(null);
+          setIsChangingVideo(false);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        onScrollToClips={scrollToClips}
+        onOpenBulkModal={() => setIsBulkModalOpen(true)}
+        onOpenShortcuts={() => setIsShortcutsOpen(true)}
       />
 
-      {/* Main Studio Viewport */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        {/* Top Header */}
-        <Header
-          currentTab={currentTab}
-          currentProject={currentProject}
-          onProjectChange={setCurrentProject}
-          onNewProject={() => {
-            const newProj: Project = {
-              id: `proj-${Date.now()}`,
-              name: `Project ${new Date().toLocaleDateString()}`,
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
-              sources: [],
-              clips: {},
-            };
-            setCurrentProject(newProj);
-            setActiveSource(null);
-            setCurrentTab('home');
-          }}
-          onExportManifest={() => {
-            const json = exportProjectManifest(currentProject);
-            const blob = new Blob([json], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${currentProject.name.toLowerCase().replace(/\s+/g, '_')}_manifest.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-          }}
-          activeSource={activeSource}
-          onOpenShortcuts={() => setIsShortcutsOpen(true)}
-        />
+      {/* Main Landing Page Flow */}
+      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-8 sm:space-y-12">
+        {/* HERO / INGEST SECTION (When no video is loaded OR when user chooses to change video) */}
+        {(!activeSource || isChangingVideo) && (
+          <section className="text-center space-y-6 pt-4 pb-2">
+            <div className="space-y-3 max-w-2xl mx-auto">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface border border-stone text-xs font-mono text-olive shadow-minimal">
+                <span className="w-2 h-2 rounded-full bg-coral animate-pulse"></span>
+                <span>Instant Web Clipper • Frame Accuracy</span>
+              </div>
+              <h1 className="font-heading font-extrabold text-3xl sm:text-4xl md:text-5xl text-botanical tracking-tight leading-tight">
+                Clip any video in seconds.
+              </h1>
+              <p className="text-sm sm:text-base text-olive max-w-lg mx-auto">
+                Paste a YouTube, Instagram, or Facebook link, or drop a video file. Your preview opens automatically with frame-accurate start and end points.
+              </p>
+            </div>
 
-        {/* Dynamic Workspace Container */}
-        <main className="flex-1 overflow-y-auto p-3 sm:p-6 pb-20 md:pb-6">
-          {/* TAB 1: HOME / INGEST */}
-          {currentTab === 'home' && (
-            <UniversalUrlInput
+            <UniversalUrlInput 
               onSourceLoaded={handleSourceLoaded}
+              autoFocus={true}
             />
-          )}
 
-          {/* TAB 2: QUICK CLIPPER */}
-          {currentTab === 'quick' && (
-            <div className="space-y-4 sm:space-y-6 max-w-5xl mx-auto">
-              {activeSource ? (
-                <>
-                  <VideoPlayer
-                    source={activeSource}
-                    videoRef={videoRef}
-                    currentTime={currentTime}
-                    duration={duration}
-                    startTime={startTime}
-                    endTime={endTime}
-                    isLooping={isLooping}
-                    onTimeUpdate={setCurrentTime}
-                    onDurationChange={setDuration}
-                  />
+            {activeSource && (
+              <div className="pt-2">
+                <button
+                  onClick={() => setIsChangingVideo(false)}
+                  className="text-xs text-olive hover:text-botanical underline font-mono"
+                >
+                  Cancel and return to current video
+                </button>
+              </div>
+            )}
+          </section>
+        )}
 
-                  <Timeline
-                    duration={duration}
-                    currentTime={currentTime}
-                    startTime={startTime}
-                    endTime={endTime}
-                    clips={currentClips}
-                    onSeek={handleSeek}
-                    onRangeChange={handleRangeChange}
-                  />
+        {/* ACTIVE VIDEO STUDIO SECTION (Revealed immediately when video is loaded) */}
+        {activeSource && !isChangingVideo && (
+          <section className="space-y-4 sm:space-y-6">
+            {/* Source Information & Quick Switcher Bar */}
+            <div className="bg-surface-card border border-stone rounded-lg px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-minimal">
+              <div className="flex items-center space-x-3 min-w-0">
+                <span className="px-2 py-0.5 rounded font-mono text-[10px] uppercase font-bold tracking-wider bg-coral text-white shrink-0">
+                  {activeSource.platform}
+                </span>
+                <span className="font-semibold text-xs sm:text-sm text-botanical truncate max-w-md" title={activeSource.title}>
+                  {activeSource.title}
+                </span>
+              </div>
 
-                  <TimeframeControls
-                    startTime={startTime}
-                    endTime={endTime}
-                    duration={duration}
-                    currentTime={currentTime}
-                    isLooping={isLooping}
-                    isEmbed={!!activeSource?.isEmbedOnly}
-                    onRangeChange={handleRangeChange}
-                    onSeek={handleSeek}
-                    onPreviewSelection={handlePreviewSelection}
-                    onToggleLoop={() => setIsLooping(!isLooping)}
-                    onAddClip={(name) => {
-                      handleAddClipRange(name);
-                      setCurrentTab('multi');
-                    }}
-                    onQuickExport={() => handleQueueSingleClip()}
-                  />
-                </>
-              ) : (
-                <div className="bg-surface-card border border-stone rounded-md p-8 sm:p-12 text-center text-olive">
-                  <p className="font-sans text-sm font-semibold text-botanical mb-1">
-                    No active video source loaded.
-                  </p>
-                  <p className="text-xs text-olive mb-4">
-                    Import a video file or paste a link to start clipping.
-                  </p>
+              <div className="flex items-center space-x-2 shrink-0 w-full sm:w-auto justify-end">
+                {activeSource.isEmbedOnly && (
                   <button
-                    onClick={() => setCurrentTab('home')}
-                    className="px-4 py-2 bg-coral text-white font-semibold rounded text-xs hover:bg-coral-hover shadow-minimal"
+                    onClick={() => setIsShareableModalOpen(true)}
+                    className="px-2.5 py-1 text-xs font-mono font-medium text-olive hover:text-coral border border-stone rounded bg-surface hover:bg-white transition-colors"
+                    title="Link local video file to export raw media"
                   >
-                    Go to Media Ingest
+                    Link Original Video
                   </button>
-                </div>
-              )}
+                )}
+                <button
+                  onClick={() => setIsChangingVideo(true)}
+                  className="px-3 py-1 bg-surface hover:bg-white border border-stone text-botanical text-xs font-semibold rounded shadow-minimal flex items-center space-x-1.5 transition-colors"
+                >
+                  <RefreshCw className="w-3 h-3 text-coral" />
+                  <span>Change Video</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Video Preview Player */}
+            <VideoPlayer
+              source={activeSource}
+              videoRef={videoRef}
+              currentTime={currentTime}
+              duration={duration}
+              startTime={startTime}
+              endTime={endTime}
+              isLooping={isLooping}
+              onTimeUpdate={setCurrentTime}
+              onDurationChange={setDuration}
+            />
+
+            {/* Frame Scrubbing Timeline */}
+            <Timeline
+              duration={duration}
+              currentTime={currentTime}
+              startTime={startTime}
+              endTime={endTime}
+              clips={currentClips}
+              onSeek={handleSeek}
+              onRangeChange={handleRangeChange}
+            />
+
+            {/* Precision Timeframe Controls & Actions */}
+            <TimeframeControls
+              startTime={startTime}
+              endTime={endTime}
+              duration={duration}
+              currentTime={currentTime}
+              isLooping={isLooping}
+              isEmbed={!!activeSource?.isEmbedOnly}
+              onRangeChange={handleRangeChange}
+              onSeek={handleSeek}
+              onPreviewSelection={handlePreviewSelection}
+              onToggleLoop={() => setIsLooping(!isLooping)}
+              onAddClip={(name) => {
+                handleAddClipRange(name);
+                scrollToClips();
+              }}
+              onQuickExport={() => handleQueueSingleClip()}
+            />
+          </section>
+        )}
+
+        {/* YOUR CLIPS SHELF (Directly below player) */}
+        <section ref={clipsShelfRef} id="clips-shelf" className="space-y-4 pt-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <h2 className="font-heading font-bold text-lg sm:text-xl text-botanical tracking-tight">
+                Your Saved Clips
+              </h2>
+              <span className="px-2 py-0.5 rounded-full bg-lime text-botanical text-xs font-mono font-bold">
+                {currentClips.length}
+              </span>
+            </div>
+
+            {currentClips.length > 0 && (
+              <button
+                onClick={handleExportCSV}
+                className="px-3 py-1.5 bg-surface hover:bg-white border border-stone text-xs font-mono text-botanical rounded shadow-minimal transition-colors"
+              >
+                Export CSV List
+              </button>
+            )}
+          </div>
+
+          {activeSource && currentClips.length > 0 ? (
+            <ClipCollectionTable
+              clips={currentClips}
+              sourceTitle={activeSource.title}
+              onClipsChange={handleUpdateClips}
+              onPreviewClip={(clip) => {
+                handleRangeChange(clip.start, clip.end);
+                handlePreviewSelection();
+                window.scrollTo({ top: 120, behavior: 'smooth' });
+              }}
+              onExportClip={(clip) => handleQueueSingleClip(clip)}
+              onBulkExport={handleBulkExport}
+              onOpenBulkModal={() => setIsBulkModalOpen(true)}
+              onExportCSV={handleExportCSV}
+            />
+          ) : (
+            <div className="bg-surface-card border border-stone rounded-lg p-6 sm:p-8 text-center text-olive space-y-2">
+              <Scissors className="w-6 h-6 text-coral mx-auto" />
+              <p className="text-sm font-semibold text-botanical">No clips added to shelf yet</p>
+              <p className="text-xs text-olive max-w-sm mx-auto">
+                Set your start and end timeframe in the controls above and click &quot;+ Add Range&quot; to save clips from this video.
+              </p>
             </div>
           )}
+        </section>
 
-          {/* TAB 3: MULTI-CLIP WORKSPACE */}
-          {currentTab === 'multi' && (
-            <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto">
-              {activeSource ? (
-                <>
-                  {/* Mobile switcher between Player and Clips Table */}
-                  <div className="lg:hidden flex items-center bg-surface border border-stone p-1 rounded-md text-xs font-medium font-mono">
-                    <button
-                      onClick={() => setMobileMultiView('player')}
-                      className={`flex-1 py-1.5 rounded transition-colors ${
-                        mobileMultiView === 'player' ? 'bg-botanical text-white font-bold' : 'text-olive'
-                      }`}
-                    >
-                      Player & Trim
-                    </button>
-                    <button
-                      onClick={() => setMobileMultiView('table')}
-                      className={`flex-1 py-1.5 rounded transition-colors ${
-                        mobileMultiView === 'table' ? 'bg-botanical text-white font-bold' : 'text-olive'
-                      }`}
-                    >
-                      Clips Table ({currentClips.length})
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                    {/* Left: Video & Timeline & Timeframe */}
-                    <div className={`lg:col-span-7 space-y-4 ${mobileMultiView === 'table' ? 'hidden lg:block' : 'block'}`}>
-                      <VideoPlayer
-                        source={activeSource}
-                        videoRef={videoRef}
-                        currentTime={currentTime}
-                        duration={duration}
-                        startTime={startTime}
-                        endTime={endTime}
-                        isLooping={isLooping}
-                        onTimeUpdate={setCurrentTime}
-                        onDurationChange={setDuration}
-                      />
-
-                      <Timeline
-                        duration={duration}
-                        currentTime={currentTime}
-                        startTime={startTime}
-                        endTime={endTime}
-                        clips={currentClips}
-                        onSeek={handleSeek}
-                        onRangeChange={handleRangeChange}
-                      />
-
-                      <TimeframeControls
-                        startTime={startTime}
-                        endTime={endTime}
-                        duration={duration}
-                        currentTime={currentTime}
-                        isLooping={isLooping}
-                        isEmbed={!!activeSource?.isEmbedOnly}
-                        onRangeChange={handleRangeChange}
-                        onSeek={handleSeek}
-                        onPreviewSelection={handlePreviewSelection}
-                        onToggleLoop={() => setIsLooping(!isLooping)}
-                        onAddClip={handleAddClipRange}
-                        onQuickExport={() => handleQueueSingleClip()}
-                      />
-                    </div>
-
-                    {/* Right: Clip Collection Table */}
-                    <div className={`lg:col-span-5 ${mobileMultiView === 'player' ? 'hidden lg:block' : 'block'}`}>
-                      <ClipCollectionTable
-                        clips={currentClips}
-                        sourceTitle={activeSource.title}
-                        onClipsChange={handleUpdateClips}
-                        onPreviewClip={(clip) => {
-                          setStartTime(clip.start);
-                          setEndTime(clip.end);
-                          handleSeek(clip.start);
-                          setMobileMultiView('player');
-                        }}
-                        onExportClip={(clip) => handleQueueSingleClip(clip)}
-                        onBulkExport={handleBulkExport}
-                        onOpenBulkModal={() => setIsBulkModalOpen(true)}
-                        onExportCSV={handleExportCSV}
-                      />
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="bg-surface-card border border-stone rounded-md p-8 sm:p-12 text-center text-olive">
-                  <p className="font-sans text-xs">No media loaded.</p>
-                  <button
-                    onClick={() => setCurrentTab('home')}
-                    className="mt-3 px-4 py-2 bg-coral text-white font-semibold rounded text-xs hover:bg-coral-hover shadow-minimal"
-                  >
-                    Load Video Source
-                  </button>
-                </div>
-              )}
+        {/* ACTIVE EXPORT QUEUE (Shows if export jobs are active or finished) */}
+        {(showQueueSection || exportJobs.length > 0) && (
+          <section className="space-y-3 pt-2">
+            <div className="flex items-center justify-between">
+              <h3 className="font-heading font-bold text-base text-botanical flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-coral animate-pulse"></span>
+                <span>Export Queue & Downloads</span>
+              </h3>
+              <button
+                onClick={() => setShowQueueSection(false)}
+                className="text-xs font-mono text-olive hover:text-botanical"
+              >
+                Hide Queue
+              </button>
             </div>
-          )}
 
-          {/* TAB 4: BATCH CLIPPER */}
-          {currentTab === 'batch' && (
-            <BatchClipperView
-              sources={currentProject.sources}
-              clipsMap={currentProject.clips}
-              currentPreset={currentPreset}
-              onPresetChange={setCurrentPreset}
-              onDispatchBatch={(selectedSourceIds, preset, pattern) => {
-                const batchJobs: ExportJob[] = [];
-                selectedSourceIds.forEach((sid) => {
-                  const src = currentProject.sources.find((s) => s.id === sid);
-                  const srcClips = currentProject.clips[sid] || [];
-                  if (!src) return;
-
-                  srcClips.forEach((clip, idx) => {
-                    const formattedName = pattern
-                      .replace('{source}', src.title.replace(/[^a-z0-9_-]/gi, '_'))
-                      .replace('{clip}', clip.name.replace(/[^a-z0-9_-]/gi, '_'))
-                      .replace('{num}', String(idx + 1).padStart(2, '0'));
-
-                    batchJobs.push({
-                      id: `batch-${Date.now()}-${sid}-${idx}`,
-                      sourceId: sid,
-                      sourceTitle: src.title,
-                      clipId: clip.id,
-                      clipName: formattedName,
-                      start: clip.start,
-                      end: clip.end,
-                      duration: clip.duration,
-                      preset,
-                      status: 'queued',
-                      progress: 0,
-                      log: [`Batch job scheduled for ${formattedName}`],
-                      createdAt: Date.now() + idx,
-                    });
-                  });
-                });
-
-                setExportJobs((prev) => [...batchJobs, ...prev]);
-                setCurrentTab('queue');
-              }}
-              onRemoveSource={(sourceId) => {
-                setCurrentProject((prev) => ({
-                  ...prev,
-                  sources: prev.sources.filter((s) => s.id !== sourceId),
-                }));
-                if (activeSource?.id === sourceId) {
-                  setActiveSource(null);
-                }
-              }}
-            />
-          )}
-
-          {/* TAB 5: SAVED CLIPS ARCHIVE */}
-          {currentTab === 'saved' && <SavedClipsView />}
-
-          {/* TAB 6: EXPORT QUEUE & LOGS */}
-          {currentTab === 'queue' && (
             <ExportQueueView
               jobs={exportJobs}
               onRetryJob={(id) => {
@@ -694,96 +614,135 @@ export const App: React.FC = () => {
                 );
               }}
               onCancelJob={(id) => {
-                activeAbortControllerRef.current?.abort();
-                setExportJobs((prev) =>
-                  prev.map((j) => (j.id === id ? { ...j, status: 'cancelled' } : j))
-                );
+                if (activeAbortControllerRef.current) {
+                  activeAbortControllerRef.current.abort();
+                }
               }}
               onClearCompleted={() => {
                 setExportJobs((prev) => prev.filter((j) => j.status !== 'completed'));
               }}
-              onClearAll={() => {
-                setExportJobs([]);
-              }}
+              onClearAll={() => setExportJobs([])}
             />
-          )}
+          </section>
+        )}
 
-          {/* TAB 7: SETTINGS & STORAGE */}
-          {currentTab === 'settings' && (
-            <SettingsView
-              defaultPreset={currentPreset}
-              onPresetChange={setCurrentPreset}
-              currentProject={currentProject}
-              onProjectImport={(proj) => {
-                setCurrentProject(proj);
-                if (proj.sources.length > 0) {
-                  setActiveSource(proj.sources[0]);
-                }
-              }}
-              onClearStorage={() => {
-                indexedDB.deleteDatabase('clipforge_db');
-                alert('Storage cleared. Please refresh the page.');
-              }}
-            />
-          )}
-        </main>
-      </div>
+        {/* LANDING PAGE HOW-IT-WORKS SECTION */}
+        <section className="border-t border-stone pt-10 sm:pt-14 space-y-8">
+          <div className="text-center space-y-2 max-w-xl mx-auto">
+            <h3 className="font-heading font-bold text-xl sm:text-2xl text-botanical tracking-tight">
+              Designed for Speed & Precision
+            </h3>
+            <p className="text-xs sm:text-sm text-olive">
+              Everything happens directly inside your browser. No wait lists, no sign-ups, and no bloated timelines.
+            </p>
+          </div>
 
-      {/* Bulk Timeframe Input Modal */}
-      <BulkTimeframeModal
-        isOpen={isBulkModalOpen}
-        onClose={() => setIsBulkModalOpen(false)}
-        maxDuration={duration}
-        onAddClips={(newClips, mode) => {
-          if (mode === 'replace') {
-            handleUpdateClips(newClips);
-          } else {
-            handleUpdateClips([...currentClips, ...newClips]);
-          }
-        }}
-      />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+            <div className="bg-surface-card border border-stone rounded-lg p-5 space-y-2 shadow-minimal">
+              <div className="w-8 h-8 rounded bg-surface border border-stone flex items-center justify-center text-coral mb-3 font-mono font-bold text-xs">
+                01
+              </div>
+              <h4 className="font-heading font-bold text-sm text-botanical">Instant Auto-Preview</h4>
+              <p className="text-xs text-olive leading-relaxed">
+                Paste any YouTube, Instagram, or Facebook link. ClipForge immediately parses the media and initializes playback with zero required setup.
+              </p>
+            </div>
 
-      {/* Keyboard Shortcuts Modal */}
-      <ShortcutsModal
-        isOpen={isShortcutsOpen}
-        onClose={() => setIsShortcutsOpen(false)}
-      />
+            <div className="bg-surface-card border border-stone rounded-lg p-5 space-y-2 shadow-minimal">
+              <div className="w-8 h-8 rounded bg-surface border border-stone flex items-center justify-center text-coral mb-3 font-mono font-bold text-xs">
+                02
+              </div>
+              <h4 className="font-heading font-bold text-sm text-botanical">Millisecond Boundaries</h4>
+              <p className="text-xs text-olive leading-relaxed">
+                Type exact timestamps like 57:58 or 1.01.58, click one-touch presets (15s, 30s, 60s), or scrub with visual handles on the interactive timeline.
+              </p>
+            </div>
 
-      {/* Shareable Planning Modal */}
-      {activeSource && (
+            <div className="bg-surface-card border border-stone rounded-lg p-5 space-y-2 shadow-minimal">
+              <div className="w-8 h-8 rounded bg-surface border border-stone flex items-center justify-center text-coral mb-3 font-mono font-bold text-xs">
+                03
+              </div>
+              <h4 className="font-heading font-bold text-sm text-botanical">Zero Cloud Privacy</h4>
+              <p className="text-xs text-olive leading-relaxed">
+                Processing runs 100% on your device using client-side WebAssembly and HTML5 Canvas. Your raw media is never uploaded to any remote server.
+              </p>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* Editorial Footer */}
+      <footer className="border-t border-stone bg-surface mt-12 py-8 px-4 sm:px-8 text-xs text-olive select-none">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center space-x-2">
+            <span className="font-heading font-bold text-botanical">ClipForge</span>
+            <span>•</span>
+            <span>Creative Video Tool</span>
+          </div>
+
+          <div className="flex items-center space-x-4 font-mono text-[11px]">
+            <span>Space: Play/Pause</span>
+            <span>•</span>
+            <span>I/O: In/Out Points</span>
+            <span>•</span>
+            <span>P: Preview Clip</span>
+          </div>
+
+          <div className="text-[11px] font-mono">
+            100% Client-Side
+          </div>
+        </div>
+      </footer>
+
+      {/* Modals */}
+      {isBulkModalOpen && (
+        <BulkTimeframeModal
+          isOpen={isBulkModalOpen}
+          onClose={() => setIsBulkModalOpen(false)}
+          maxDuration={duration}
+          onAddClips={(newClips, mode) => {
+            if (mode === 'replace') {
+              handleUpdateClips(newClips);
+            } else {
+              handleUpdateClips([...currentClips, ...newClips]);
+            }
+            scrollToClips();
+          }}
+        />
+      )}
+
+      {isShortcutsOpen && (
+        <ShortcutsModal
+          isOpen={isShortcutsOpen}
+          onClose={() => setIsShortcutsOpen(false)}
+        />
+      )}
+
+      {isShareableModalOpen && activeSource && (
         <ShareablePlanningModal
           isOpen={isShareableModalOpen}
           onClose={() => setIsShareableModalOpen(false)}
           source={activeSource}
-          clips={currentClips.length > 0 ? currentClips : [{ id: 'active-range', name: 'Active Selection', start: startTime, end: endTime, duration: endTime - startTime }]}
-          onMediaFileLinked={(file) => {
-            const objectUrl = URL.createObjectURL(file);
-            const updatedSource: ClipSource = {
-              ...activeSource,
-              platform: 'local',
-              url: objectUrl,
-              file,
-              objectUrl,
-              isEmbedOnly: false,
-            };
-            setActiveSource(updatedSource);
-            const newJob: ExportJob = {
-              id: `job-${Date.now()}`,
-              sourceId: updatedSource.id,
-              sourceTitle: updatedSource.title,
-              clipId: 'quick-clip',
-              clipName: `Clip_${new Date().toISOString().slice(11, 19).replace(/:/g, '')}`,
+          clips={currentClips.length > 0 ? currentClips : [
+            {
+              id: 'current-range',
+              name: 'Active Clip',
               start: startTime,
               end: endTime,
               duration: endTime - startTime,
-              preset: { ...currentPreset },
-              status: 'queued',
-              progress: 0,
-              log: [`Linked source media: ${file.name}`, `Cutting exact range: ${startTime.toFixed(3)}s to ${endTime.toFixed(3)}s`],
-              createdAt: Date.now(),
+            }
+          ]}
+          onMediaFileLinked={(file: File) => {
+            const objectUrl = URL.createObjectURL(file);
+            const linkedSource: ClipSource = {
+              ...activeSource,
+              isEmbedOnly: false,
+              file: file,
+              objectUrl: objectUrl,
+              url: objectUrl,
             };
-            setExportJobs((prev) => [newJob, ...prev]);
-            setCurrentTab('queue');
+            setActiveSource(linkedSource);
+            setIsShareableModalOpen(false);
           }}
         />
       )}

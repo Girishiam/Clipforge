@@ -6,125 +6,108 @@ import {
   X, 
   AlertCircle, 
   FileVideo,
-  Play,
-  Loader2
+  Loader2,
+  Sparkles,
+  ArrowRight
 } from 'lucide-react';
 import { parseVideoUrl, ParsedUrlInfo } from '../utils/urlParser';
 import { ClipSource } from '../types';
 
 interface UniversalUrlInputProps {
   onSourceLoaded: (source: ClipSource) => void;
+  autoFocus?: boolean;
 }
 
 export const UniversalUrlInput: React.FC<UniversalUrlInputProps> = ({
   onSourceLoaded,
+  autoFocus = false,
 }) => {
   const [urlInput, setUrlInput] = useState('');
-  const [urlInfo, setUrlInfo] = useState<ParsedUrlInfo | null>(null);
-  const [isFetchingDetails, setIsFetchingDetails] = useState(false);
-  const [fetchedDetails, setFetchedDetails] = useState<{ title: string; author?: string; thumbnail?: string } | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [loadingError, setLoadingError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleUrlChange = (value: string) => {
-    setUrlInput(value);
-    setLoadingError(null);
-    setFetchedDetails(null);
-
-    if (value.trim()) {
-      const parsed = parseVideoUrl(value);
-      setUrlInfo(parsed);
-
-      if (parsed.isValid && parsed.platform === 'youtube' && parsed.videoId) {
-        setIsFetchingDetails(true);
-        fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${parsed.videoId}`)
-          .then((res) => res.json())
-          .then((data) => {
-            if (data.title) {
-              setFetchedDetails({
-                title: data.title,
-                author: data.author_name,
-                thumbnail: data.thumbnail_url || `https://i.ytimg.com/vi/${parsed.videoId}/hqdefault.jpg`,
-              });
-            }
-          })
-          .catch(() => {})
-          .finally(() => setIsFetchingDetails(false));
-      }
-    } else {
-      setUrlInfo(null);
-      setIsFetchingDetails(false);
+  useEffect(() => {
+    if (autoFocus && inputRef.current) {
+      inputRef.current.focus();
     }
-  };
+  }, [autoFocus]);
 
-  const handlePaste = async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (text) {
-        handleUrlChange(text);
-      }
-    } catch {
-      const input = document.getElementById('universal-url-field');
-      input?.focus();
-    }
-  };
+  // Instantly process and load video link as soon as it's entered or pasted
+  const processAndLoadUrl = (rawUrl: string) => {
+    const trimmed = rawUrl.trim();
+    if (!trimmed) return;
 
-  const handleClear = () => {
-    setUrlInput('');
-    setUrlInfo(null);
-    setFetchedDetails(null);
-    setLoadingError(null);
-  };
-
-  const handleResolveUrl = () => {
-    if (!urlInfo || !urlInfo.isValid) {
-      setLoadingError('Please enter a valid video link before proceeding.');
+    const parsed = parseVideoUrl(trimmed);
+    if (!parsed.isValid) {
+      setLoadingError('Please enter a valid video link (YouTube, Instagram, Facebook, or direct video stream).');
       return;
     }
 
-    if (urlInfo.platform === 'youtube' && urlInfo.videoId) {
-      const title = fetchedDetails?.title || urlInfo.title;
-      const newSource: ClipSource = {
-        id: `yt-${urlInfo.videoId}-${Date.now()}`,
-        title,
+    setLoadingError(null);
+    setIsProcessing(true);
+
+    if (parsed.platform === 'youtube' && parsed.videoId) {
+      // Instantly load video preview into workspace with zero delay
+      const initialSource: ClipSource = {
+        id: `yt-${parsed.videoId}-${Date.now()}`,
+        title: parsed.title || 'YouTube Video',
         platform: 'youtube',
-        url: urlInput,
-        originalUrl: urlInput,
-        videoId: urlInfo.videoId,
-        author: fetchedDetails?.author,
-        thumbnailUrl: fetchedDetails?.thumbnail || `https://i.ytimg.com/vi/${urlInfo.videoId}/hqdefault.jpg`,
+        url: trimmed,
+        originalUrl: trimmed,
+        videoId: parsed.videoId,
+        thumbnailUrl: `https://i.ytimg.com/vi/${parsed.videoId}/hqdefault.jpg`,
         duration: 3600,
         isEmbedOnly: true,
-        embedUrl: urlInfo.embedUrl,
+        embedUrl: parsed.embedUrl,
         createdAt: Date.now(),
       };
-      onSourceLoaded(newSource);
-    } else if (urlInfo.isEmbedOnly) {
+      
+      onSourceLoaded(initialSource);
+      setIsProcessing(false);
+
+      // Concurrently fetch video title in background without blocking preview
+      fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${parsed.videoId}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.title) {
+            onSourceLoaded({
+              ...initialSource,
+              title: data.title,
+              author: data.author_name,
+              thumbnailUrl: data.thumbnail_url || initialSource.thumbnailUrl,
+            });
+          }
+        })
+        .catch(() => {});
+    } else if (parsed.isEmbedOnly) {
       const newSource: ClipSource = {
         id: `embed-${Date.now()}`,
-        title: urlInfo.title,
-        platform: urlInfo.platform,
-        url: urlInput,
-        originalUrl: urlInput,
+        title: parsed.title,
+        platform: parsed.platform,
+        url: trimmed,
+        originalUrl: trimmed,
         duration: 3600,
         isEmbedOnly: true,
-        embedUrl: urlInfo.embedUrl,
+        embedUrl: parsed.embedUrl,
         createdAt: Date.now(),
       };
       onSourceLoaded(newSource);
-    } else if (urlInfo.directUrl) {
+      setIsProcessing(false);
+    } else if (parsed.directUrl) {
       const tempVideo = document.createElement('video');
-      tempVideo.src = urlInfo.directUrl;
+      tempVideo.src = parsed.directUrl;
       tempVideo.preload = 'metadata';
 
       tempVideo.onloadedmetadata = () => {
         const newSource: ClipSource = {
           id: `stream-${Date.now()}`,
-          title: urlInfo.title,
+          title: parsed.title,
           platform: 'direct_url',
-          url: urlInfo.directUrl!,
-          originalUrl: urlInput,
+          url: parsed.directUrl!,
+          originalUrl: trimmed,
           duration: tempVideo.duration || 60,
           width: tempVideo.videoWidth,
           height: tempVideo.videoHeight,
@@ -132,16 +115,60 @@ export const UniversalUrlInput: React.FC<UniversalUrlInputProps> = ({
           createdAt: Date.now(),
         };
         onSourceLoaded(newSource);
+        setIsProcessing(false);
       };
 
       tempVideo.onerror = () => {
-        setLoadingError('Failed to load remote video stream. Ensure the URL permits CORS streaming or use local file upload.');
+        setIsProcessing(false);
+        setLoadingError('Failed to load remote video stream. Ensure the URL permits streaming or drop a local file.');
       };
     }
   };
 
+  const handleInputChange = (value: string) => {
+    setUrlInput(value);
+    setLoadingError(null);
+    const trimmed = value.trim();
+    // Auto-detect full valid URLs immediately as user finishes typing or pastes
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      const parsed = parseVideoUrl(trimmed);
+      if (parsed.isValid) {
+        processAndLoadUrl(trimmed);
+      }
+    }
+  };
+
+  const handlePasteEvent = (e: React.ClipboardEvent) => {
+    const text = e.clipboardData.getData('text');
+    if (text) {
+      e.preventDefault();
+      setUrlInput(text);
+      processAndLoadUrl(text);
+    }
+  };
+
+  const handlePasteFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        setUrlInput(text);
+        processAndLoadUrl(text);
+      }
+    } catch {
+      inputRef.current?.focus();
+    }
+  };
+
+  const handleClear = () => {
+    setUrlInput('');
+    setLoadingError(null);
+    setIsProcessing(false);
+    inputRef.current?.focus();
+  };
+
   const handleFileChange = (file: File) => {
     setLoadingError(null);
+    setIsProcessing(true);
     const objectUrl = URL.createObjectURL(file);
     const tempVideo = document.createElement('video');
     tempVideo.src = objectUrl;
@@ -164,9 +191,11 @@ export const UniversalUrlInput: React.FC<UniversalUrlInputProps> = ({
         createdAt: Date.now(),
       };
       onSourceLoaded(newSource);
+      setIsProcessing(false);
     };
 
     tempVideo.onerror = () => {
+      setIsProcessing(false);
       setLoadingError('Could not decode the selected video file. Supported formats: MP4, WebM, MOV.');
     };
   };
@@ -189,167 +218,113 @@ export const UniversalUrlInput: React.FC<UniversalUrlInputProps> = ({
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto pb-16 md:pb-6">
-      {/* Universal URL Resolver Card */}
-      <div className="bg-surface-card border border-stone rounded-md p-4 sm:p-6 shadow-minimal">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-          <div>
-            <h2 className="font-heading font-bold text-base text-botanical">
-              Enter Video Link
-            </h2>
-            <p className="text-xs text-olive">
-              Paste any YouTube, Instagram, Facebook link or direct video file URL.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1.5 text-[10px] sm:text-[11px] font-mono">
-            <span className="px-2 py-0.5 rounded bg-surface border border-stone text-botanical">YouTube</span>
-            <span className="px-2 py-0.5 rounded bg-surface border border-stone text-botanical">Instagram</span>
-            <span className="px-2 py-0.5 rounded bg-surface border border-stone text-botanical">Facebook</span>
-            <span className="px-2 py-0.5 rounded bg-surface border border-stone text-botanical">Direct MP4</span>
+    <div className="w-full max-w-3xl mx-auto space-y-4">
+      {/* Universal Input Card */}
+      <div className="bg-surface-card border border-stone rounded-lg p-3 sm:p-5 shadow-minimal">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <label htmlFor="universal-url-input" className="text-xs font-semibold text-botanical uppercase tracking-wider font-mono flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-coral inline-block"></span>
+            Paste Video Link
+          </label>
+          <div className="flex items-center gap-1.5 text-[10px] font-mono text-olive">
+            <span className="px-1.5 py-0.5 rounded bg-surface border border-stone">YouTube</span>
+            <span className="px-1.5 py-0.5 rounded bg-surface border border-stone">Reels</span>
+            <span className="px-1.5 py-0.5 rounded bg-surface border border-stone">Facebook</span>
+            <span className="px-1.5 py-0.5 rounded bg-surface border border-stone">MP4</span>
           </div>
         </div>
 
-        {/* Input Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-          <div className="relative flex-1">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-olive">
+        {/* Input Bar with Instant Paste */}
+        <div className="relative flex items-center">
+          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-olive">
+            {isProcessing ? (
+              <Loader2 className="w-4 h-4 animate-spin text-coral" />
+            ) : (
               <LinkIcon className="w-4 h-4" />
-            </div>
-            <input
-              id="universal-url-field"
-              type="text"
-              value={urlInput}
-              onChange={(e) => handleUrlChange(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleResolveUrl()}
-              placeholder="e.g. https://www.youtube.com/watch?v=... or https://youtu.be/..."
-              className="w-full pl-9 pr-16 py-2.5 bg-ivory border border-stone rounded text-xs font-mono text-botanical placeholder:text-olive focus:bg-white"
-            />
-            {urlInput && (
+            )}
+          </div>
+          
+          <input
+            ref={inputRef}
+            id="universal-url-input"
+            type="text"
+            value={urlInput}
+            onChange={(e) => handleInputChange(e.target.value)}
+            onPaste={handlePasteEvent}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                processAndLoadUrl(urlInput);
+              }
+            }}
+            placeholder="Paste any YouTube, Instagram, or Facebook link..."
+            className="w-full pl-10 pr-28 sm:pr-32 py-3 bg-ivory border border-stone rounded-md text-xs sm:text-sm font-mono text-botanical placeholder:text-olive focus:bg-white focus:border-coral focus:outline-none transition-colors"
+          />
+
+          <div className="absolute inset-y-0 right-1.5 flex items-center gap-1">
+            {urlInput ? (
               <button
                 onClick={handleClear}
-                className="absolute inset-y-0 right-8 pr-2 flex items-center text-olive hover:text-botanical"
+                className="p-1.5 text-olive hover:text-botanical rounded transition-colors"
                 title="Clear input"
+                type="button"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                onClick={handlePasteFromClipboard}
+                className="px-2.5 py-1.5 bg-coral text-white text-[11px] font-semibold rounded hover:bg-coral-hover transition-colors shadow-minimal flex items-center gap-1"
+                type="button"
+                title="Paste from clipboard"
+              >
+                <Clipboard className="w-3.5 h-3.5" />
+                <span>Paste</span>
               </button>
             )}
-            <button
-              onClick={handlePaste}
-              className="absolute inset-y-0 right-0 pr-3 flex items-center text-olive hover:text-coral"
-              title="Paste from clipboard"
-            >
-              <Clipboard className="w-4 h-4" />
-            </button>
-          </div>
 
-          <button
-            onClick={handleResolveUrl}
-            disabled={!urlInfo || !urlInfo.isValid}
-            className={`px-5 py-2.5 text-xs font-semibold rounded transition-colors flex items-center justify-center space-x-1.5 shrink-0 ${
-              urlInfo && urlInfo.isValid
-                ? 'bg-coral text-white hover:bg-coral-hover shadow-minimal'
-                : 'bg-stone text-olive cursor-not-allowed'
-            }`}
-          >
-            <span>Resolve Link</span>
-          </button>
+            {urlInput && (
+              <button
+                onClick={() => processAndLoadUrl(urlInput)}
+                className="px-3 py-1.5 bg-coral text-white text-xs font-semibold rounded hover:bg-coral-hover transition-colors shadow-minimal flex items-center gap-1"
+                type="button"
+              >
+                <span>Go</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Fetching State */}
-        {isFetchingDetails && (
-          <div className="mt-3 flex items-center space-x-2 text-xs font-mono text-olive py-2">
-            <Loader2 className="w-4 h-4 animate-spin text-coral" />
-            <span>Fetching video details...</span>
-          </div>
-        )}
-
-        {/* Fetched Preview Card */}
-        {urlInfo && urlInfo.isValid && (
-          <div className="mt-4 p-3 bg-surface border border-stone rounded text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="flex items-center space-x-3 min-w-0">
-              {fetchedDetails?.thumbnail ? (
-                <img
-                  src={fetchedDetails.thumbnail}
-                  alt="Thumbnail"
-                  className="w-20 h-12 object-cover rounded border border-stone shrink-0"
-                />
-              ) : (
-                <div className="w-20 h-12 bg-ivory rounded border border-stone flex items-center justify-center shrink-0">
-                  <Play className="w-4 h-4 text-coral" />
-                </div>
-              )}
-              <div className="min-w-0">
-                <div className="flex items-center space-x-2">
-                  <span className="px-1.5 py-0.5 rounded font-mono text-[9px] uppercase font-bold tracking-wider bg-coral text-white">
-                    {urlInfo.badgeLabel}
-                  </span>
-                  {fetchedDetails?.author && (
-                    <span className="text-[11px] font-mono text-olive truncate">
-                      {fetchedDetails.author}
-                    </span>
-                  )}
-                </div>
-                <div className="font-semibold text-botanical truncate mt-0.5">
-                  {fetchedDetails?.title || urlInfo.title}
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={handleResolveUrl}
-              className="w-full sm:w-auto px-4 py-2 bg-botanical text-white hover:bg-botanical-light rounded text-xs font-semibold shrink-0 shadow-minimal flex items-center justify-center space-x-1"
-            >
-              <Play className="w-3.5 h-3.5 text-lime fill-lime" />
-              <span>Open in Clipper</span>
-            </button>
-          </div>
-        )}
-
+        {/* Error message */}
         {loadingError && (
-          <div className="mt-3 p-3 bg-crimson-subtle border border-crimson text-crimson rounded text-xs flex items-center space-x-2">
+          <div className="mt-3 p-2.5 bg-crimson-subtle border border-crimson text-crimson rounded text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{loadingError}</span>
           </div>
         )}
-      </div>
 
-      {/* Local Video File Ingest Zone */}
-      <div
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        className={`bg-surface-card border-2 border-dashed rounded-md p-6 sm:p-10 text-center transition-colors shadow-minimal ${
-          isDragging ? 'border-coral bg-coral-subtle' : 'border-stone hover:border-olive'
-        }`}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="video/mp4,video/webm,video/ogg,video/quicktime"
-          onChange={(e) => e.target.files && e.target.files[0] && handleFileChange(e.target.files[0])}
-          className="hidden"
-        />
-
-        <div className="w-12 h-12 rounded bg-surface border border-stone mx-auto flex items-center justify-center text-botanical mb-3">
-          <Upload className="w-5 h-5 text-coral" />
-        </div>
-
-        <h3 className="font-heading font-bold text-sm text-botanical mb-1">
-          Or Upload Local Video File
-        </h3>
-        <p className="text-xs text-olive max-w-md mx-auto mb-4">
-          Drag and drop your MP4, WebM, or MOV file here, or click browse.
-          100% processed directly inside your browser with zero cloud uploads.
-        </p>
-
-        <button
+        {/* Instant file drop / alternative */}
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          className="px-5 py-2.5 bg-coral text-white text-xs font-semibold rounded hover:bg-coral-hover transition-colors shadow-minimal inline-flex items-center space-x-2"
+          className={`mt-3 border border-dashed rounded-md p-3 text-center cursor-pointer transition-colors ${
+            isDragging ? 'border-coral bg-coral-subtle' : 'border-stone hover:border-olive bg-surface'
+          }`}
         >
-          <FileVideo className="w-4 h-4" />
-          <span>Browse Video File</span>
-        </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="video/mp4,video/webm,video/ogg,video/quicktime"
+            onChange={(e) => e.target.files && e.target.files[0] && handleFileChange(e.target.files[0])}
+            className="hidden"
+          />
+          <div className="flex items-center justify-center gap-2 text-xs text-olive hover:text-botanical">
+            <Upload className="w-3.5 h-3.5 text-coral" />
+            <span>Or drag and drop a local video file (MP4, WebM, MOV)</span>
+          </div>
+        </div>
       </div>
     </div>
   );
