@@ -154,9 +154,18 @@ export const App: React.FC = () => {
   const handleRangeChange = (start: number, end: number) => {
     setStartTime(start);
     setEndTime(end);
+    if (end > duration) {
+      setDuration(Math.ceil(end + 60));
+    }
     if (videoRef.current) {
       videoRef.current.currentTime = start;
     }
+    try {
+      const ytIframe = document.querySelector('#yt-player-target') as HTMLIFrameElement;
+      if (ytIframe && ytIframe.contentWindow) {
+        ytIframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'seekTo', args: [start, true] }), '*');
+      }
+    } catch {}
     setCurrentTime(start);
   };
 
@@ -488,6 +497,7 @@ export const App: React.FC = () => {
                     duration={duration}
                     currentTime={currentTime}
                     isLooping={isLooping}
+                    isEmbed={!!activeSource?.isEmbedOnly}
                     onRangeChange={handleRangeChange}
                     onSeek={handleSeek}
                     onPreviewSelection={handlePreviewSelection}
@@ -574,6 +584,7 @@ export const App: React.FC = () => {
                         duration={duration}
                         currentTime={currentTime}
                         isLooping={isLooping}
+                        isEmbed={!!activeSource?.isEmbedOnly}
                         onRangeChange={handleRangeChange}
                         onSeek={handleSeek}
                         onPreviewSelection={handlePreviewSelection}

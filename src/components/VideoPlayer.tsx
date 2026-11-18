@@ -86,6 +86,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               if (destroyed) return;
               // YT.PlayerState.PLAYING = 1, PAUSED = 2, ENDED = 0
               setIsPlaying(event.data === 1);
+              try {
+                const dur = event.target.getDuration();
+                if (dur && dur > 0 && Math.abs(dur - duration) > 1) {
+                  onDurationChange(dur);
+                }
+              } catch {}
             },
           },
         });
@@ -108,6 +114,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             if (isLooping && curr >= endTime) {
               ytPlayerRef.current.seekTo(startTime, true);
             }
+          }
+
+          // Continuously monitor duration in case it loaded asynchronously
+          const dur = ytPlayerRef.current.getDuration();
+          if (dur && dur > 0 && Math.abs(dur - duration) > 1) {
+            onDurationChange(dur);
           }
         } catch {}
       }

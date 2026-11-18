@@ -25,60 +25,86 @@ export function formatTimestamp(seconds: number, includeMs: boolean = true): str
 }
 
 /**
- * Formats seconds into human duration e.g. "1m 15s" or "00:01:15.500"
+ * Formats seconds into human duration e.g. "00:01:15.500"
  */
 export function formatDuration(seconds: number): string {
   return formatTimestamp(seconds, true);
 }
 
 /**
- * Parses timestamps in various formats:
+ * Parses timestamps in various natural formats:
  * - "00:12:35.500"
- * - "12:35.500"
- * - "12:35"
- * - "1:15:30"
+ * - "1:01:58" / "01:01:58"
+ * - "1.01.58" / "01.01.58" (dot-separated hours.mins.secs)
+ * - "57:58" (mins:secs)
+ * - "57.58" (mins.secs)
+ * - "1h 1m 58s" / "57m 58s"
  * - "75.5" (plain seconds)
  * Returns seconds as float or null if invalid.
  */
 export function parseTimestamp(input: string): number | null {
   if (!input) return null;
-  const trimmed = input.trim();
-  if (!trimmed) return null;
-  if (trimmed.startsWith('-')) return null;
+  let trimmed = input.trim().toLowerCase();
+  if (!trimmed || trimmed.startsWith('-')) return null;
 
-  // Case 1: Plain number of seconds
+  // Case A: Natural language units: "1h 1m 58s", "57m 58s", "1h 1m", "90s", "1h01m58s"
+  if (/[hms]/.test(trimmed)) {
+    let total = 0;
+    let matched = false;
+    const h = trimmed.match(/(\d+)\s*h/);
+    const m = trimmed.match(/(\d+)\s*m(?!s)/);
+    const s = trimmed.match(/(\d+(\.\d+)?)\s*s/);
+    if (h) { total += parseInt(h[1], 10) * 3600; matched = true; }
+    if (m) { total += parseInt(m[1], 10) * 60; matched = true; }
+    if (s) { total += parseFloat(s[1]); matched = true; }
+    if (matched) return total;
+  }
+
+  // Case B: Dot-separated format like "1.01.58", "01.01.58"
+  // If input contains 2 or more dots (H.M.S or H.M.S.ms) and NO colons, convert time-like dots to colons!
+  if (!trimmed.includes(':') && trimmed.includes('.')) {
+    const dotParts = trimmed.split('.');
+    if (dotParts.length === 3) {
+      // e.g. "1.01.58" -> H:M:S
+      trimmed = `${dotParts[0]}:${dotParts[1]}:${dotParts[2]}`;
+    } else if (dotParts.length === 4) {
+      // e.g. "1.01.58.500" -> H:M:S.ms
+      trimmed = `${dotParts[0]}:${dotParts[1]}:${dotParts[2]}.${dotParts[3]}`;
+    }
+  }
+
+  // Case C: Standard Colon Timecode: "H:M:S", "M:S", "H:M:S.ms", "M:S.ms"
+  if (trimmed.includes(':')) {
+    const parts = trimmed.split(':');
+    if (parts.some(p => p.includes('-') || isNaN(Number(p)))) return null;
+
+    if (parts.length === 2) {
+      // M:S or M:S.ms (e.g. "57:58" or "125:30")
+      const minutes = parseInt(parts[0], 10);
+      const seconds = parseFloat(parts[1]);
+      if (isNaN(minutes) || minutes < 0) return null;
+      if (isNaN(seconds) || seconds < 0 || seconds >= 60) return null;
+      return minutes * 60 + seconds;
+    } else if (parts.length === 3) {
+      // H:M:S or H:M:S.ms (e.g. "1:01:58" or "01:01:58.000")
+      const hours = parseInt(parts[0], 10);
+      const minutes = parseInt(parts[1], 10);
+      const seconds = parseFloat(parts[2]);
+      if (isNaN(hours) || hours < 0) return null;
+      if (isNaN(minutes) || minutes < 0 || minutes >= 60) return null;
+      if (isNaN(seconds) || seconds < 0 || seconds >= 60) return null;
+      return hours * 3600 + minutes * 60 + seconds;
+    }
+    return null;
+  }
+
+  // Case D: Plain number of seconds
   if (/^\d+(\.\d+)?$/.test(trimmed)) {
     const val = parseFloat(trimmed);
     return isNaN(val) || val < 0 ? null : val;
   }
 
-  // Case 2: Timecode HH:MM:SS.mmm or MM:SS.mmm
-  // Regex matches H:M:S(.ms) or M:S(.ms)
-  const parts = trimmed.split(':');
-  if (parts.length < 2 || parts.length > 3) return null;
-
-  // Ensure none of the parts have negative signs
-  if (parts.some(p => p.includes('-'))) return null;
-
-  let hours = 0;
-  let minutes = 0;
-  let seconds = 0;
-
-  if (parts.length === 3) {
-    hours = parseInt(parts[0], 10);
-    minutes = parseInt(parts[1], 10);
-    seconds = parseFloat(parts[2]);
-  } else {
-    minutes = parseInt(parts[0], 10);
-    seconds = parseFloat(parts[1]);
-  }
-
-  if (isNaN(hours) || hours < 0) return null;
-  if (isNaN(minutes) || minutes < 0 || minutes >= 60) return null;
-  if (isNaN(seconds) || seconds < 0 || seconds >= 60) return null;
-
-  const totalSeconds = hours * 3600 + minutes * 60 + seconds;
-  return totalSeconds;
+  return null;
 }
 
 export interface ValidationResult {
@@ -106,7 +132,8 @@ export function validateTimeframe(
   if (end - start < 0.1) {
     return { isValid: false, error: 'Clip duration must be at least 0.100s (100ms).' };
   }
-  if (maxDuration && maxDuration > 0) {
+  // Check maxDuration if provided
+  if (maxDuration !== undefined && maxDuration > 0) {
     if (end > maxDuration + 0.05) {
       return {
         isValid: false,
@@ -148,12 +175,6 @@ export interface BulkParseResult {
 
 /**
  * Advanced bulk timeframe parser
- * Supports:
- * - "00:01:20 - 00:01:55"
- * - "00:01:20 - 00:01:55, Highlight 1"
- * - "00:01:20, 00:01:55, Intro Hook"
- * - "Intro Hook: 00:01:20 - 00:01:55"
- * - "01:20 to 01:55"
  */
 export function parseBulkTimeframes(
   text: string,
@@ -163,7 +184,6 @@ export function parseBulkTimeframes(
   const rows: ParsedBulkRow[] = [];
 
   lines.forEach((line, index) => {
-    // Check if header row (skip if "start,end" header)
     if (index === 0 && /^start.*end/i.test(line.replace(/[^a-z]/gi, ''))) {
       return;
     }
@@ -172,11 +192,9 @@ export function parseBulkTimeframes(
     let rawEnd = '';
     let clipName = `Clip ${String(index + 1).padStart(2, '0')}`;
 
-    // Pattern 1: CSV format: Start, End, [Name] or Name, Start, End
     if (line.includes(',')) {
       const parts = line.split(',').map(p => p.trim());
       if (parts.length >= 2) {
-        // check if part 0 is timestamp
         const t0 = parseTimestamp(parts[0]);
         const t1 = parseTimestamp(parts[1]);
         if (t0 !== null && t1 !== null) {
@@ -184,7 +202,6 @@ export function parseBulkTimeframes(
           rawEnd = parts[1];
           if (parts[2]) clipName = parts[2];
         } else if (parts.length >= 3) {
-          // Maybe Name, Start, End
           const t1_alt = parseTimestamp(parts[1]);
           const t2_alt = parseTimestamp(parts[2]);
           if (t1_alt !== null && t2_alt !== null) {
@@ -196,12 +213,9 @@ export function parseBulkTimeframes(
       }
     }
 
-    // Pattern 2: Dash or "to" separated: "00:01:20 - 00:01:55" or "Intro: 00:01:20 - 00:01:55"
     if (!rawStart && (line.includes('-') || line.toLowerCase().includes(' to '))) {
       let content = line;
-      // Check for leading label like "Hook: 00:00:10 - 00:00:25"
       const colonIdx = line.indexOf(':');
-      // Ensure colon isn't part of timestamp (timestamp colon followed by digits)
       if (colonIdx > 0 && isNaN(Number(line[colonIdx + 1]))) {
         clipName = line.substring(0, colonIdx).trim();
         content = line.substring(colonIdx + 1).trim();
@@ -212,7 +226,6 @@ export function parseBulkTimeframes(
 
       if (parts.length >= 2) {
         rawStart = parts[0];
-        // If part 1 has trailing name: "00:01:55 (Intro)" or "00:01:55, Intro"
         const endPart = parts[1];
         if (endPart.includes(',')) {
           const sub = endPart.split(',').map(s => s.trim());
@@ -275,7 +288,6 @@ export function parseBulkTimeframes(
     });
   });
 
-  // Duplicate & Overlap Detection
   const validRows = rows.filter(r => r.isValid);
   let hasDuplicates = false;
   let hasOverlaps = false;
@@ -285,13 +297,11 @@ export function parseBulkTimeframes(
       const a = validRows[i];
       const b = validRows[j];
 
-      // Exact match check (tolerance of 50ms)
       if (Math.abs(a.start - b.start) < 0.05 && Math.abs(a.end - b.end) < 0.05) {
         b.isDuplicate = true;
         hasDuplicates = true;
       }
 
-      // Overlap check
       const overlaps = Math.max(a.start, b.start) < Math.min(a.end, b.end) - 0.05;
       if (overlaps) {
         b.isOverlapping = true;

@@ -20,6 +20,7 @@ interface TimeframeControlsProps {
   duration: number;
   currentTime: number;
   isLooping: boolean;
+  isEmbed?: boolean;
   onRangeChange: (start: number, end: number) => void;
   onSeek: (time: number) => void;
   onPreviewSelection: () => void;
@@ -36,6 +37,7 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
   duration,
   currentTime,
   isLooping,
+  isEmbed = false,
   onRangeChange,
   onSeek,
   onPreviewSelection,
@@ -49,24 +51,32 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
   const [validation, setValidation] = useState<ValidationResult>({ isValid: true });
   const [presetAnchor, setPresetAnchor] = useState<PresetAnchor>('start-at-playhead');
 
+  const effectiveMaxDuration = isEmbed ? undefined : (duration > 0 ? duration : undefined);
+
   // Keep text inputs synchronized when timeline handles or seek changes external start/end
   useEffect(() => {
     setStartInput(formatTimestamp(startTime));
     setEndInput(formatTimestamp(endTime));
-    setValidation(validateTimeframe(startTime, endTime, duration));
-  }, [startTime, endTime, duration]);
+    setValidation(validateTimeframe(startTime, endTime, effectiveMaxDuration));
+  }, [startTime, endTime, duration, effectiveMaxDuration]);
 
   const handleApplyStart = (newStartStr: string) => {
     setStartInput(newStartStr);
     const parsed = parseTimestamp(newStartStr);
     if (parsed !== null) {
-      const v = validateTimeframe(parsed, endTime, duration);
-      setValidation(v);
-      if (v.isValid) {
-        onRangeChange(parsed, endTime);
+      if (parsed >= endTime) {
+        const nextEnd = parsed + 60;
+        onRangeChange(parsed, nextEnd);
+        setValidation({ isValid: true });
+      } else {
+        const v = validateTimeframe(parsed, endTime, effectiveMaxDuration);
+        setValidation(v);
+        if (v.isValid) {
+          onRangeChange(parsed, endTime);
+        }
       }
     } else {
-      setValidation({ isValid: false, error: 'Invalid start timestamp format (use HH:MM:SS.mmm).' });
+      setValidation({ isValid: false, error: 'Invalid start timestamp format (e.g. 57:58, 1:01:58 or 1.01.58).' });
     }
   };
 
@@ -74,28 +84,64 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
     setEndInput(newEndStr);
     const parsed = parseTimestamp(newEndStr);
     if (parsed !== null) {
-      const v = validateTimeframe(startTime, parsed, duration);
-      setValidation(v);
-      if (v.isValid) {
-        onRangeChange(startTime, parsed);
+      if (parsed <= startTime) {
+        const nextStart = Math.max(0, parsed - 60);
+        onRangeChange(nextStart, parsed);
+        setValidation({ isValid: true });
+      } else {
+        const v = validateTimeframe(startTime, parsed, effectiveMaxDuration);
+        setValidation(v);
+        if (v.isValid) {
+          onRangeChange(startTime, parsed);
+        }
       }
     } else {
-      setValidation({ isValid: false, error: 'Invalid end timestamp format (use HH:MM:SS.mmm).' });
+      setValidation({ isValid: false, error: 'Invalid end timestamp format (e.g. 1:01:58, 1.01.58 or 57:58).' });
+    }
+  };
+
+  const handleBlurStart = () => {
+    const parsed = parseTimestamp(startInput);
+    if (parsed !== null) {
+      setStartInput(formatTimestamp(parsed));
+      if (parsed >= endTime) {
+        onRangeChange(parsed, parsed + 60);
+      } else {
+        onRangeChange(parsed, endTime);
+      }
+      setValidation({ isValid: true });
+    } else {
+      setStartInput(formatTimestamp(startTime));
+    }
+  };
+
+  const handleBlurEnd = () => {
+    const parsed = parseTimestamp(endInput);
+    if (parsed !== null) {
+      setEndInput(formatTimestamp(parsed));
+      if (parsed <= startTime) {
+        onRangeChange(Math.max(0, parsed - 60), parsed);
+      } else {
+        onRangeChange(startTime, parsed);
+      }
+      setValidation({ isValid: true });
+    } else {
+      setEndInput(formatTimestamp(endTime));
     }
   };
 
   // Steppers for precision adjustments
   const adjustStart = (deltaSeconds: number) => {
     const newStart = Math.max(0, startTime + deltaSeconds);
-    const v = validateTimeframe(newStart, endTime, duration);
+    const v = validateTimeframe(newStart, endTime, effectiveMaxDuration);
     if (v.isValid) {
       onRangeChange(newStart, endTime);
     }
   };
 
   const adjustEnd = (deltaSeconds: number) => {
-    const newEnd = Math.min(duration || Infinity, endTime + deltaSeconds);
-    const v = validateTimeframe(startTime, newEnd, duration);
+    const newEnd = Math.max(startTime + 0.1, endTime + deltaSeconds);
+    const v = validateTimeframe(startTime, newEnd, effectiveMaxDuration);
     if (v.isValid) {
       onRangeChange(startTime, newEnd);
     }
@@ -103,18 +149,18 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
 
   // Set from current playhead
   const setStartToPlayhead = () => {
-    const v = validateTimeframe(currentTime, endTime, duration);
+    const v = validateTimeframe(currentTime, endTime, effectiveMaxDuration);
     if (v.isValid) {
       onRangeChange(currentTime, endTime);
     } else {
       // If current playhead is past end, move end forward too
-      const safeEnd = Math.min(duration, currentTime + 5);
+      const safeEnd = currentTime + 5;
       onRangeChange(currentTime, safeEnd);
     }
   };
 
   const setEndToPlayhead = () => {
-    const v = validateTimeframe(startTime, currentTime, duration);
+    const v = validateTimeframe(startTime, currentTime, effectiveMaxDuration);
     if (v.isValid) {
       onRangeChange(startTime, currentTime);
     } else {
@@ -210,9 +256,10 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
                 type="text"
                 value={startInput}
                 onChange={(e) => handleApplyStart(e.target.value)}
-                onBlur={() => setStartInput(formatTimestamp(startTime))}
+                onBlur={handleBlurStart}
+                onKeyDown={(e) => e.key === 'Enter' && handleBlurStart()}
                 className="flex-1 px-3 py-2 bg-white border border-stone rounded font-mono font-bold text-base text-botanical tracking-wider"
-                placeholder="00:00:00.000"
+                placeholder="00:00:00.000 or 57:58"
               />
               {/* Steppers */}
               <div className="flex flex-col space-y-1">
@@ -251,7 +298,7 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
               </div>
             </div>
             <div className="mt-2 flex justify-between items-center text-[11px] font-mono text-olive">
-              <span>Format: HH:MM:SS.mmm</span>
+              <span>e.g. 57:58, 1:01:58, 1.01.58, or HH:MM:SS</span>
               <button
                 onClick={() => onSeek(startTime)}
                 className="text-coral hover:underline"
@@ -283,9 +330,10 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
                 type="text"
                 value={endInput}
                 onChange={(e) => handleApplyEnd(e.target.value)}
-                onBlur={() => setEndInput(formatTimestamp(endTime))}
+                onBlur={handleBlurEnd}
+                onKeyDown={(e) => e.key === 'Enter' && handleBlurEnd()}
                 className="flex-1 px-3 py-2 bg-white border border-stone rounded font-mono font-bold text-base text-botanical tracking-wider"
-                placeholder="00:00:00.000"
+                placeholder="00:00:00.000 or 1:01:58"
               />
               {/* Steppers */}
               <div className="flex flex-col space-y-1">
@@ -324,7 +372,7 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
               </div>
             </div>
             <div className="mt-2 flex justify-between items-center text-[11px] font-mono text-olive">
-              <span>Format: HH:MM:SS.mmm</span>
+              <span>e.g. 1:01:58, 1.01.58, 57:58, or HH:MM:SS</span>
               <button
                 onClick={() => onSeek(endTime)}
                 className="text-coral hover:underline"

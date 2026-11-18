@@ -27,6 +27,12 @@ describe('Timecode Formatting & Parsing', () => {
     expect(parseTimestamp('00:01:06.750')).toBe(66.75);
     expect(parseTimestamp('01:00:00')).toBe(3600);
     expect(parseTimestamp('45.25')).toBe(45.25);
+    // User requested formats:
+    expect(parseTimestamp('57:58')).toBe(3478);
+    expect(parseTimestamp('1.01.58')).toBe(3718);
+    expect(parseTimestamp('01.01.58')).toBe(3718);
+    expect(parseTimestamp('1:01:58')).toBe(3718);
+    expect(parseTimestamp('1h 1m 58s')).toBe(3718);
   });
 
   it('rejects malformed timestamps gracefully with null', () => {
