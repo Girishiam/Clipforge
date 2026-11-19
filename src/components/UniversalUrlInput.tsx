@@ -325,6 +325,27 @@ export const UniversalUrlInput: React.FC<UniversalUrlInputProps> = ({
             <span>Or drag and drop a local video file (MP4, WebM, MOV)</span>
           </div>
         </div>
+
+        {/* Sample Links for Instant 1-Click Testing */}
+        <div className="mt-3 pt-3 border-t border-stone flex flex-wrap items-center justify-between gap-2 text-xs">
+          <span className="text-olive font-mono text-[11px]">Try a sample:</span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => processAndLoadUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ')}
+              className="px-2 py-0.5 rounded bg-surface hover:bg-white border border-stone text-botanical hover:text-coral font-mono text-[11px] transition-colors"
+            >
+              YouTube Video
+            </button>
+            <button
+              type="button"
+              onClick={() => processAndLoadUrl('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4')}
+              className="px-2 py-0.5 rounded bg-surface hover:bg-white border border-stone text-botanical hover:text-coral font-mono text-[11px] transition-colors"
+            >
+              Direct MP4 Stream
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

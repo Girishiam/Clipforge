@@ -8,7 +8,8 @@ import {
   Upload,
   Scissors,
   FileVideo,
-  Info
+  Info,
+  Terminal
 } from 'lucide-react';
 import { ClipSource, ClipRange } from '../types';
 import { formatTimestamp } from '../utils/timecode';
@@ -30,6 +31,7 @@ export const ShareablePlanningModal: React.FC<ShareablePlanningModalProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedCommand, setCopiedCommand] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -38,6 +40,10 @@ export const ShareablePlanningModal: React.FC<ShareablePlanningModalProps> = ({
   const shareTimestampLink = source.originalUrl
     ? `${source.originalUrl.split('&t=')[0].split('?t=')[0]}${source.originalUrl.includes('?') ? '&' : '?'}t=${Math.floor(firstClip.start)}s`
     : source.url;
+
+  const startStr = formatTimestamp(firstClip.start, false);
+  const endStr = formatTimestamp(firstClip.end, false);
+  const ytdlpCommand = `yt-dlp --download-sections "*${startStr}-${endStr}" "${source.originalUrl || source.url}" -o "%(title)s_clip.%(ext)s"`;
 
   const generateEditorInstructions = () => {
     let text = `# CLIPFORGE EDITORIAL TIMEFRAME PLAN\n`;
@@ -77,6 +83,12 @@ export const ShareablePlanningModal: React.FC<ShareablePlanningModalProps> = ({
     navigator.clipboard.writeText(shareTimestampLink);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const handleCopyCommand = () => {
+    navigator.clipboard.writeText(ytdlpCommand);
+    setCopiedCommand(true);
+    setTimeout(() => setCopiedCommand(false), 2000);
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -164,7 +176,30 @@ export const ShareablePlanningModal: React.FC<ShareablePlanningModalProps> = ({
             </p>
           </div>
 
-          {/* Option 2: Shareable Timestamp Link & Instructions */}
+          {/* Option 2: 1-Click Terminal Command (yt-dlp) */}
+          <div className="space-y-1.5 pt-2 border-t border-stone">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-mono uppercase tracking-wider text-olive font-semibold flex items-center gap-1.5">
+                <Terminal className="w-3.5 h-3.5 text-coral" />
+                <span>1-Click Terminal Command (yt-dlp):</span>
+              </span>
+              <button
+                onClick={handleCopyCommand}
+                className="px-2.5 py-1 bg-surface hover:bg-stone border border-stone text-botanical rounded text-xs font-mono flex items-center space-x-1"
+              >
+                {copiedCommand ? <Check className="w-3.5 h-3.5 text-forest" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedCommand ? 'Copied' : 'Copy Command'}</span>
+              </button>
+            </div>
+            <div className="p-2.5 bg-botanical rounded text-ivory font-mono text-[11px] overflow-x-auto select-all">
+              {ytdlpCommand}
+            </div>
+            <p className="text-[10px] text-olive font-mono">
+              Downloads and cuts the exact segment directly from your terminal with zero loss.
+            </p>
+          </div>
+
+          {/* Option 3: Shareable Timestamp Link & Instructions */}
           <div className="space-y-2 pt-2 border-t border-stone">
             <div className="flex items-center justify-between">
               <span className="text-xs font-mono uppercase tracking-wider text-olive font-semibold">

@@ -23,7 +23,7 @@ import {
   saveExportedClip, 
   getStorageEstimate 
 } from './services/storage';
-import { exportClipsToCSV } from './utils/timecode';
+import { exportClipsToCSV, formatTimestamp } from './utils/timecode';
 import { 
   HeroFilmstripGraphic, 
   FeatureIngestGraphic, 
@@ -83,10 +83,18 @@ export const App: React.FC = () => {
   const [currentPreset, setCurrentPreset] = useState<ExportPreset>(DEFAULT_PRESET);
   const [showQueueSection, setShowQueueSection] = useState<boolean>(false);
 
-  // Modals
+  // Modals & Feedback
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isShareableModalOpen, setIsShareableModalOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage((prev) => (prev === msg ? null : prev));
+    }, 2800);
+  };
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const clipsShelfRef = useRef<HTMLDivElement>(null);
@@ -206,6 +214,7 @@ export const App: React.FC = () => {
       duration: endTime - startTime,
     };
     handleUpdateClips([...currentClips, newClip]);
+    showToast(`Saved "${newClip.name}" (${formatTimestamp(newClip.start, false)} - ${formatTimestamp(newClip.end, false)}) to shelf`);
   };
 
   // Single Clip Quick Export
@@ -282,6 +291,7 @@ export const App: React.FC = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    showToast(`Exported ${currentClips.length} clips to CSV`);
   };
 
   // ================= Job Processing Queue Engine ================= //
@@ -766,6 +776,13 @@ export const App: React.FC = () => {
             setIsShareableModalOpen(false);
           }}
         />
+      )}
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 bg-botanical text-white font-mono text-xs rounded-md shadow-hover border border-stone/30 flex items-center gap-2 animate-pulse">
+          <CheckCircle2 className="w-4 h-4 text-lime shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
       )}
     </div>
   );
