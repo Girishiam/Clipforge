@@ -47,86 +47,110 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
 }) => {
   const [startInput, setStartInput] = useState(formatTimestamp(startTime));
   const [endInput, setEndInput] = useState(formatTimestamp(endTime));
+  const [isStartFocused, setIsStartFocused] = useState(false);
+  const [isEndFocused, setIsEndFocused] = useState(false);
   const [clipName, setClipName] = useState('Highlight Clip');
   const [validation, setValidation] = useState<ValidationResult>({ isValid: true });
   const [presetAnchor, setPresetAnchor] = useState<PresetAnchor>('start-at-playhead');
 
   const effectiveMaxDuration = isEmbed ? undefined : (duration > 0 ? duration : undefined);
 
-  // Keep text inputs synchronized when timeline handles or seek changes external start/end
+  // Keep text inputs synchronized with external changes, but NEVER overwrite while user is actively typing
   useEffect(() => {
-    setStartInput(formatTimestamp(startTime));
-    setEndInput(formatTimestamp(endTime));
+    if (!isStartFocused) {
+      setStartInput(formatTimestamp(startTime));
+    }
+    if (!isEndFocused) {
+      setEndInput(formatTimestamp(endTime));
+    }
     setValidation(validateTimeframe(startTime, endTime, effectiveMaxDuration));
-  }, [startTime, endTime, duration, effectiveMaxDuration]);
+  }, [startTime, endTime, duration, effectiveMaxDuration, isStartFocused, isEndFocused]);
 
-  const handleApplyStart = (newStartStr: string) => {
-    setStartInput(newStartStr);
-    const parsed = parseTimestamp(newStartStr);
+  const handleStartInputChange = (val: string) => {
+    setStartInput(val);
+    const parsed = parseTimestamp(val);
     if (parsed !== null) {
-      if (parsed >= endTime) {
-        const nextEnd = parsed + 60;
-        onRangeChange(parsed, nextEnd);
-        setValidation({ isValid: true });
-      } else {
-        const v = validateTimeframe(parsed, endTime, effectiveMaxDuration);
-        setValidation(v);
-        if (v.isValid) {
-          onRangeChange(parsed, endTime);
-        }
-      }
-    } else {
-      setValidation({ isValid: false, error: 'Invalid start timestamp format (e.g. 57:58, 1:01:58 or 1.01.58).' });
+      setValidation({ isValid: true });
+    } else if (val.trim().length > 3) {
+      setValidation({ isValid: false, error: 'Enter format like 57:58, 1.02.56, or 00:57:58' });
     }
   };
 
-  const handleApplyEnd = (newEndStr: string) => {
-    setEndInput(newEndStr);
-    const parsed = parseTimestamp(newEndStr);
-    if (parsed !== null) {
-      if (parsed <= startTime) {
-        const nextStart = Math.max(0, parsed - 60);
-        onRangeChange(nextStart, parsed);
-        setValidation({ isValid: true });
-      } else {
-        const v = validateTimeframe(startTime, parsed, effectiveMaxDuration);
-        setValidation(v);
-        if (v.isValid) {
-          onRangeChange(startTime, parsed);
-        }
-      }
-    } else {
-      setValidation({ isValid: false, error: 'Invalid end timestamp format (e.g. 1:01:58, 1.01.58 or 57:58).' });
-    }
-  };
-
-  const handleBlurStart = () => {
+  const handleCommitStart = () => {
+    setIsStartFocused(false);
     const parsed = parseTimestamp(startInput);
     if (parsed !== null) {
-      setStartInput(formatTimestamp(parsed));
+      let nextEnd = endTime;
       if (parsed >= endTime) {
-        onRangeChange(parsed, parsed + 60);
-      } else {
-        onRangeChange(parsed, endTime);
+        nextEnd = parsed + 60;
       }
+      onRangeChange(parsed, nextEnd);
+      setStartInput(formatTimestamp(parsed));
       setValidation({ isValid: true });
     } else {
       setStartInput(formatTimestamp(startTime));
+      setValidation({ isValid: true });
     }
   };
 
-  const handleBlurEnd = () => {
+  const handleEndInputChange = (val: string) => {
+    setEndInput(val);
+    const parsed = parseTimestamp(val);
+    if (parsed !== null) {
+      setValidation({ isValid: true });
+    } else if (val.trim().length > 3) {
+      setValidation({ isValid: false, error: 'Enter format like 1.02.56, 1:02:56, or 57:58' });
+    }
+  };
+
+  const handleCommitEnd = () => {
+    setIsEndFocused(false);
     const parsed = parseTimestamp(endInput);
     if (parsed !== null) {
-      setEndInput(formatTimestamp(parsed));
+      let nextStart = startTime;
       if (parsed <= startTime) {
-        onRangeChange(Math.max(0, parsed - 60), parsed);
-      } else {
-        onRangeChange(startTime, parsed);
+        nextStart = Math.max(0, parsed - 60);
       }
+      onRangeChange(nextStart, parsed);
+      setEndInput(formatTimestamp(parsed));
       setValidation({ isValid: true });
     } else {
       setEndInput(formatTimestamp(endTime));
+      setValidation({ isValid: true });
+    }
+  };
+
+  const handlePasteStart = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text').trim();
+    if (text) {
+      e.preventDefault();
+      setStartInput(text);
+      const parsed = parseTimestamp(text);
+      if (parsed !== null) {
+        let nextEnd = endTime;
+        if (parsed >= endTime) nextEnd = parsed + 60;
+        onRangeChange(parsed, nextEnd);
+        setStartInput(formatTimestamp(parsed));
+        setIsStartFocused(false);
+        setValidation({ isValid: true });
+      }
+    }
+  };
+
+  const handlePasteEnd = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text').trim();
+    if (text) {
+      e.preventDefault();
+      setEndInput(text);
+      const parsed = parseTimestamp(text);
+      if (parsed !== null) {
+        let nextStart = startTime;
+        if (parsed <= startTime) nextStart = Math.max(0, parsed - 60);
+        onRangeChange(nextStart, parsed);
+        setEndInput(formatTimestamp(parsed));
+        setIsEndFocused(false);
+        setValidation({ isValid: true });
+      }
     }
   };
 
@@ -252,15 +276,32 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
             </div>
 
             <div className="flex items-center space-x-2">
-              <input
-                type="text"
-                value={startInput}
-                onChange={(e) => handleApplyStart(e.target.value)}
-                onBlur={handleBlurStart}
-                onKeyDown={(e) => e.key === 'Enter' && handleBlurStart()}
-                className="flex-1 px-3 py-2 bg-white border border-stone rounded font-mono font-bold text-base text-botanical tracking-wider"
-                placeholder="00:00:00.000 or 57:58"
-              />
+              <div className="relative flex-1 flex items-center">
+                <input
+                  type="text"
+                  value={startInput}
+                  onFocus={() => setIsStartFocused(true)}
+                  onChange={(e) => handleStartInputChange(e.target.value)}
+                  onBlur={handleCommitStart}
+                  onKeyDown={(e) => e.key === 'Enter' && handleCommitStart()}
+                  onPaste={handlePasteStart}
+                  className="w-full pl-3 pr-14 py-2 bg-white border border-stone rounded font-mono font-bold text-base text-botanical tracking-wider focus:border-coral focus:outline-none"
+                  placeholder="00:00:00.000 or 57:58"
+                />
+                {isStartFocused && (
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleCommitStart();
+                    }}
+                    className="absolute right-1.5 px-2 py-1 bg-coral text-white text-[11px] font-mono font-bold rounded shadow-minimal hover:bg-coral-hover"
+                    title="Apply start time"
+                  >
+                    Set
+                  </button>
+                )}
+              </div>
               {/* Steppers */}
               <div className="flex flex-col space-y-1">
                 <div className="flex space-x-1">
@@ -298,7 +339,7 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
               </div>
             </div>
             <div className="mt-2 flex justify-between items-center text-[11px] font-mono text-olive">
-              <span>e.g. 57:58, 1:01:58, 1.01.58, or HH:MM:SS</span>
+              <span>e.g. 57:58, 1:02:56, 1.02.56, or HH:MM:SS</span>
               <button
                 onClick={() => onSeek(startTime)}
                 className="text-coral hover:underline"
@@ -326,15 +367,32 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
             </div>
 
             <div className="flex items-center space-x-2">
-              <input
-                type="text"
-                value={endInput}
-                onChange={(e) => handleApplyEnd(e.target.value)}
-                onBlur={handleBlurEnd}
-                onKeyDown={(e) => e.key === 'Enter' && handleBlurEnd()}
-                className="flex-1 px-3 py-2 bg-white border border-stone rounded font-mono font-bold text-base text-botanical tracking-wider"
-                placeholder="00:00:00.000 or 1:01:58"
-              />
+              <div className="relative flex-1 flex items-center">
+                <input
+                  type="text"
+                  value={endInput}
+                  onFocus={() => setIsEndFocused(true)}
+                  onChange={(e) => handleEndInputChange(e.target.value)}
+                  onBlur={handleCommitEnd}
+                  onKeyDown={(e) => e.key === 'Enter' && handleCommitEnd()}
+                  onPaste={handlePasteEnd}
+                  className="w-full pl-3 pr-14 py-2 bg-white border border-stone rounded font-mono font-bold text-base text-botanical tracking-wider focus:border-coral focus:outline-none"
+                  placeholder="00:00:00.000 or 1.02.56"
+                />
+                {isEndFocused && (
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleCommitEnd();
+                    }}
+                    className="absolute right-1.5 px-2 py-1 bg-coral text-white text-[11px] font-mono font-bold rounded shadow-minimal hover:bg-coral-hover"
+                    title="Apply end time"
+                  >
+                    Set
+                  </button>
+                )}
+              </div>
               {/* Steppers */}
               <div className="flex flex-col space-y-1">
                 <div className="flex space-x-1">
@@ -372,7 +430,7 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
               </div>
             </div>
             <div className="mt-2 flex justify-between items-center text-[11px] font-mono text-olive">
-              <span>e.g. 1:01:58, 1.01.58, 57:58, or HH:MM:SS</span>
+              <span>e.g. 1.02.56, 1:02:56, 57:58, or HH:MM:SS</span>
               <button
                 onClick={() => onSeek(endTime)}
                 className="text-coral hover:underline"
@@ -461,7 +519,11 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
         {/* Playback Controls */}
         <div className="flex items-center space-x-2">
           <button
-            onClick={onPreviewSelection}
+            onClick={() => {
+              if (isStartFocused) handleCommitStart();
+              if (isEndFocused) handleCommitEnd();
+              onPreviewSelection();
+            }}
             className="px-3.5 py-2 bg-surface hover:bg-stone border border-stone text-botanical text-xs font-medium rounded flex items-center space-x-1.5 shadow-minimal"
           >
             <Play className="w-3.5 h-3.5 text-coral fill-coral" />
@@ -494,6 +556,8 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
 
           <button
             onClick={() => {
+              if (isStartFocused) handleCommitStart();
+              if (isEndFocused) handleCommitEnd();
               if (validation.isValid) {
                 onAddClip(clipName);
               }
@@ -511,7 +575,13 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
           </button>
 
           <button
-            onClick={onQuickExport}
+            onClick={() => {
+              if (isStartFocused) handleCommitStart();
+              if (isEndFocused) handleCommitEnd();
+              if (validation.isValid) {
+                onQuickExport();
+              }
+            }}
             disabled={!validation.isValid}
             className={`px-4 py-2 text-xs font-semibold rounded flex items-center space-x-1.5 shadow-minimal transition-colors ${
               validation.isValid

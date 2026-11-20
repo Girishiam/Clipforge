@@ -30,6 +30,9 @@ describe('Timecode Formatting & Parsing', () => {
     // User requested formats:
     expect(parseTimestamp('57:58')).toBe(3478);
     expect(parseTimestamp('1.01.58')).toBe(3718);
+    expect(parseTimestamp('1.02.56')).toBe(3776);
+    expect(parseTimestamp('01.02.56')).toBe(3776);
+    expect(parseTimestamp('1:02:56')).toBe(3776);
     expect(parseTimestamp('01.01.58')).toBe(3718);
     expect(parseTimestamp('1:01:58')).toBe(3718);
     expect(parseTimestamp('1h 1m 58s')).toBe(3718);
