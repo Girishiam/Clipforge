@@ -6,7 +6,7 @@ import {
   XCircle, 
   CheckCircle, 
   Clock, 
-  Terminal, 
+  Info, 
   Archive, 
   FileVideo, 
   AlertCircle,
@@ -213,9 +213,9 @@ export const ExportQueueView: React.FC<ExportQueueViewProps> = ({
                     <button
                       onClick={() => setSelectedLogJob(selectedLogJob?.id === job.id ? null : job)}
                       className="p-1.5 text-olive hover:text-botanical hover:bg-surface border border-stone rounded"
-                      title="View Render Terminal Logs"
+                      title="View Export Details"
                     >
-                      <Terminal className="w-3.5 h-3.5" />
+                      <Info className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
