@@ -36,7 +36,7 @@ def main():
         sys.executable, "-m", "yt_dlp",
         "--download-sections", section_spec,
         "--force-keyframes-at-cuts",
-        "-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/bestvideo+bestaudio/best",
         "--merge-output-format", "mp4",
         args.url,
         "-o", args.output,
