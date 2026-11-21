@@ -87,6 +87,7 @@ export const App: React.FC = () => {
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isShareableModalOpen, setIsShareableModalOpen] = useState(false);
+  const [isDownloadingDirectClip, setIsDownloadingDirectClip] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -224,17 +225,55 @@ export const App: React.FC = () => {
   };
 
   // Single Clip Quick Export
-  const handleQueueSingleClip = (clip?: ClipRange) => {
+  const handleQueueSingleClip = async (clip?: ClipRange) => {
     if (!activeSource) return;
-
-    if (activeSource.isEmbedOnly) {
-      setIsShareableModalOpen(true);
-      return;
-    }
 
     const cStart = clip ? clip.start : startTime;
     const cEnd = clip ? clip.end : endTime;
-    const cName = clip ? clip.name : `Clip_${new Date().toISOString().slice(11, 19).replace(/:/g, '')}`;
+    const cName = clip ? clip.name : `Clip_${formatTimestamp(cStart, false).replace(/:/g, '-')}`;
+
+    if (activeSource.isEmbedOnly) {
+      setIsDownloadingDirectClip(true);
+      showToast(`Clipping video from ${formatTimestamp(cStart, false)} to ${formatTimestamp(cEnd, false)}... ⚡`);
+
+      try {
+        const response = await fetch('/api/clip', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: activeSource.originalUrl || activeSource.url,
+            start: cStart,
+            end: cEnd,
+            title: cName,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Direct clipping service error');
+        }
+
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        const cleanTitle = (cName || activeSource.title || 'Clip')
+          .replace(/[^a-zA-Z0-9_-]/g, '_')
+          .slice(0, 30);
+        a.download = `${cleanTitle}.mp4`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 10000);
+
+        showToast(`✓ Downloaded ${cleanTitle}.mp4!`);
+      } catch (err: any) {
+        console.warn('Direct URL download failed, opening fallback options:', err);
+        setIsShareableModalOpen(true);
+      } finally {
+        setIsDownloadingDirectClip(false);
+      }
+      return;
+    }
 
     const newJob: ExportJob = {
       id: `job-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
@@ -257,10 +296,44 @@ export const App: React.FC = () => {
   };
 
   // Bulk Export Dispatcher
-  const handleBulkExport = (clipsToExport: ClipRange[]) => {
+  const handleBulkExport = async (clipsToExport: ClipRange[]) => {
     if (!activeSource) return;
+
     if (activeSource.isEmbedOnly) {
-      setIsShareableModalOpen(true);
+      setIsDownloadingDirectClip(true);
+      showToast(`Downloading ${clipsToExport.length} clips... ⚡`);
+
+      for (let i = 0; i < clipsToExport.length; i++) {
+        const c = clipsToExport[i];
+        try {
+          showToast(`Clipping ${i + 1}/${clipsToExport.length}: "${c.name}"...`);
+          const response = await fetch('/api/clip', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              url: activeSource.originalUrl || activeSource.url,
+              start: c.start,
+              end: c.end,
+              title: c.name,
+            }),
+          });
+          if (response.ok) {
+            const blob = await response.blob();
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = `${c.name.replace(/[^a-zA-Z0-9_-]/g, '_')}.mp4`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 10000);
+          }
+        } catch (e) {
+          console.error('Failed to export clip', c.name, e);
+        }
+      }
+      setIsDownloadingDirectClip(false);
+      showToast(`✓ All ${clipsToExport.length} clips downloaded!`);
       return;
     }
 
@@ -510,9 +583,9 @@ export const App: React.FC = () => {
                   <button
                     onClick={() => setIsShareableModalOpen(true)}
                     className="px-2.5 py-1 text-xs font-mono font-medium text-olive hover:text-coral border border-stone rounded bg-surface hover:bg-white transition-colors"
-                    title="Link local video file to export raw media"
+                    title="More export options & fallbacks"
                   >
-                    Link Original Video
+                    Export Options
                   </button>
                 )}
                 <button
@@ -557,6 +630,7 @@ export const App: React.FC = () => {
               currentTime={currentTime}
               isLooping={isLooping}
               isEmbed={!!activeSource?.isEmbedOnly}
+              isDownloading={isDownloadingDirectClip}
               onRangeChange={handleRangeChange}
               onSeek={handleSeek}
               onPreviewSelection={handlePreviewSelection}
@@ -566,6 +640,7 @@ export const App: React.FC = () => {
                 scrollToClips();
               }}
               onQuickExport={() => handleQueueSingleClip()}
+              onOpenOptions={() => setIsShareableModalOpen(true)}
             />
           </section>
         )}

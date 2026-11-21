@@ -32,6 +32,25 @@ export function formatDuration(seconds: number): string {
 }
 
 /**
+ * Formats seconds into natural friendly text e.g. "57m 58s" or "1h 2m 56s"
+ */
+export function formatHumanReadableTime(seconds: number): string {
+  if (isNaN(seconds) || seconds < 0) return '0s';
+  const totalSecs = Math.round(seconds);
+  const s = totalSecs % 60;
+  const m = Math.floor(totalSecs / 60) % 60;
+  const h = Math.floor(totalSecs / 3600);
+
+  if (h > 0) {
+    return `${h}h ${m}m ${s}s`;
+  }
+  if (m > 0) {
+    return `${m}m ${s}s`;
+  }
+  return `${s}s`;
+}
+
+/**
  * Parses timestamps in various natural formats:
  * - "00:12:35.500"
  * - "1:01:58" / "01:01:58"

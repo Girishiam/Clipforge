@@ -188,7 +188,7 @@ export const ClipCollectionTable: React.FC<ClipCollectionTableProps> = ({
               className="px-3 py-1 bg-coral text-white font-semibold rounded hover:bg-coral-hover flex items-center space-x-1"
             >
               <Download className="w-3 h-3" />
-              <span>Export Selected ({selectedIds.size})</span>
+              <span>Download Selected ({selectedIds.size})</span>
             </button>
             <button
               onClick={handleBulkDelete}
@@ -358,7 +358,7 @@ export const ClipCollectionTable: React.FC<ClipCollectionTableProps> = ({
                         <button
                           onClick={() => onExportClip(clip)}
                           className="p-1.5 text-coral hover:bg-coral-subtle border border-coral/40 rounded font-semibold"
-                          title="Export This Clip"
+                          title="Download This Clip (MP4)"
                         >
                           <Download className="w-3 h-3" />
                         </button>

@@ -10,9 +10,12 @@ import {
   Crosshair, 
   Check, 
   AlertTriangle,
-  Repeat
+  Repeat,
+  Loader2,
+  SlidersHorizontal,
+  MoreVertical
 } from 'lucide-react';
-import { formatTimestamp, parseTimestamp, validateTimeframe, ValidationResult } from '../utils/timecode';
+import { formatTimestamp, parseTimestamp, validateTimeframe, ValidationResult, formatHumanReadableTime } from '../utils/timecode';
 
 interface TimeframeControlsProps {
   startTime: number;
@@ -21,12 +24,14 @@ interface TimeframeControlsProps {
   currentTime: number;
   isLooping: boolean;
   isEmbed?: boolean;
+  isDownloading?: boolean;
   onRangeChange: (start: number, end: number) => void;
   onSeek: (time: number) => void;
   onPreviewSelection: () => void;
   onToggleLoop: () => void;
   onAddClip: (name: string) => void;
   onQuickExport: () => void;
+  onOpenOptions?: () => void;
 }
 
 type PresetAnchor = 'start-at-playhead' | 'center-playhead' | 'end-at-playhead';
@@ -38,12 +43,14 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
   currentTime,
   isLooping,
   isEmbed = false,
+  isDownloading = false,
   onRangeChange,
   onSeek,
   onPreviewSelection,
   onToggleLoop,
   onAddClip,
   onQuickExport,
+  onOpenOptions,
 }) => {
   const [startInput, setStartInput] = useState(formatTimestamp(startTime));
   const [endInput, setEndInput] = useState(formatTimestamp(endTime));
@@ -121,81 +128,90 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
   };
 
   const handlePasteStart = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    const text = e.clipboardData.getData('text').trim();
-    if (text) {
+    const text = e.clipboardData.getData('text');
+    const parsed = parseTimestamp(text);
+    if (parsed !== null) {
       e.preventDefault();
-      setStartInput(text);
-      const parsed = parseTimestamp(text);
-      if (parsed !== null) {
-        let nextEnd = endTime;
-        if (parsed >= endTime) nextEnd = parsed + 60;
-        onRangeChange(parsed, nextEnd);
-        setStartInput(formatTimestamp(parsed));
-        setIsStartFocused(false);
-        setValidation({ isValid: true });
+      setIsStartFocused(false);
+      let nextEnd = endTime;
+      if (parsed >= endTime) {
+        nextEnd = parsed + 60;
       }
+      onRangeChange(parsed, nextEnd);
+      setStartInput(formatTimestamp(parsed));
+      setValidation({ isValid: true });
     }
   };
 
   const handlePasteEnd = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    const text = e.clipboardData.getData('text').trim();
-    if (text) {
+    const text = e.clipboardData.getData('text');
+    const parsed = parseTimestamp(text);
+    if (parsed !== null) {
       e.preventDefault();
-      setEndInput(text);
-      const parsed = parseTimestamp(text);
-      if (parsed !== null) {
-        let nextStart = startTime;
-        if (parsed <= startTime) nextStart = Math.max(0, parsed - 60);
-        onRangeChange(nextStart, parsed);
-        setEndInput(formatTimestamp(parsed));
-        setIsEndFocused(false);
-        setValidation({ isValid: true });
+      setIsEndFocused(false);
+      let nextStart = startTime;
+      if (parsed <= startTime) {
+        nextStart = Math.max(0, parsed - 60);
       }
+      onRangeChange(nextStart, parsed);
+      setEndInput(formatTimestamp(parsed));
+      setValidation({ isValid: true });
     }
   };
 
-  // Steppers for precision adjustments
-  const adjustStart = (deltaSeconds: number) => {
-    const newStart = Math.max(0, startTime + deltaSeconds);
-    const v = validateTimeframe(newStart, endTime, effectiveMaxDuration);
-    if (v.isValid) {
+  const adjustStart = (delta: number) => {
+    const newStart = Math.max(0, startTime + delta);
+    if (newStart < endTime) {
       onRangeChange(newStart, endTime);
     }
   };
 
-  const adjustEnd = (deltaSeconds: number) => {
-    const newEnd = Math.max(startTime + 0.1, endTime + deltaSeconds);
-    const v = validateTimeframe(startTime, newEnd, effectiveMaxDuration);
-    if (v.isValid) {
-      onRangeChange(startTime, newEnd);
-    }
+  const adjustEnd = (delta: number) => {
+    const newEnd = Math.max(startTime + 0.1, endTime + delta);
+    onRangeChange(startTime, newEnd);
   };
 
-  // Set from current playhead
   const setStartToPlayhead = () => {
-    const v = validateTimeframe(currentTime, endTime, effectiveMaxDuration);
-    if (v.isValid) {
-      onRangeChange(currentTime, endTime);
-    } else {
-      // If current playhead is past end, move end forward too
-      const safeEnd = currentTime + 5;
-      onRangeChange(currentTime, safeEnd);
+    let nextEnd = endTime;
+    if (currentTime >= endTime) {
+      nextEnd = currentTime + 10;
     }
+    onRangeChange(currentTime, nextEnd);
   };
 
   const setEndToPlayhead = () => {
-    const v = validateTimeframe(startTime, currentTime, effectiveMaxDuration);
-    if (v.isValid) {
-      onRangeChange(startTime, currentTime);
-    } else {
-      // If current playhead is before start, adjust start backward
-      const safeStart = Math.max(0, currentTime - 5);
-      onRangeChange(safeStart, currentTime);
+    let nextStart = startTime;
+    if (currentTime <= startTime) {
+      nextStart = Math.max(0, currentTime - 10);
     }
+    onRangeChange(nextStart, currentTime);
   };
 
-  // Quick Duration Presets
-  const presets: { label: string; seconds: number }[] = [
+  const applyPresetDuration = (presetSec: number) => {
+    let newStart = startTime;
+    let newEnd = endTime;
+
+    switch (presetAnchor) {
+      case 'start-at-playhead':
+        newStart = currentTime;
+        newEnd = newStart + presetSec;
+        break;
+      case 'center-playhead':
+        newStart = Math.max(0, currentTime - presetSec / 2);
+        newEnd = newStart + presetSec;
+        break;
+      case 'end-at-playhead':
+        newEnd = currentTime;
+        newStart = Math.max(0, newEnd - presetSec);
+        break;
+    }
+
+    onRangeChange(newStart, newEnd);
+  };
+
+  const clipDuration = Math.max(0, endTime - startTime);
+
+  const presets = [
     { label: '5s', seconds: 5 },
     { label: '10s', seconds: 10 },
     { label: '15s', seconds: 15 },
@@ -207,51 +223,33 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
     { label: '5m', seconds: 300 },
   ];
 
-  const applyPresetDuration = (presetSecs: number) => {
-    let s = startTime;
-    let e = startTime + presetSecs;
-
-    if (presetAnchor === 'start-at-playhead') {
-      s = currentTime;
-      e = currentTime + presetSecs;
-    } else if (presetAnchor === 'center-playhead') {
-      s = Math.max(0, currentTime - presetSecs / 2);
-      e = s + presetSecs;
-    } else if (presetAnchor === 'end-at-playhead') {
-      e = currentTime;
-      s = Math.max(0, currentTime - presetSecs);
-    }
-
-    if (duration > 0 && e > duration) {
-      e = duration;
-      s = Math.max(0, e - presetSecs);
-    }
-
-    onRangeChange(s, e);
-  };
-
-  const clipDuration = Math.max(0, endTime - startTime);
+  const parsedStartPreview = parseTimestamp(startInput);
+  const parsedEndPreview = parseTimestamp(endInput);
 
   return (
-    <div className="bg-surface-card border border-stone rounded-md p-6 space-y-6 shadow-minimal">
-      {/* Top Banner: Large Timeframe Inputs */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
+    <div className="bg-surface-card border border-stone rounded-md p-4 sm:p-5 shadow-minimal space-y-4">
+      {/* Precision Controls Header */}
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stone pb-3">
           <div>
-            <h3 className="font-heading font-bold text-sm text-botanical uppercase tracking-wider">
-              Exact Timeframe Boundaries
+            <h3 className="font-heading font-bold text-sm text-botanical uppercase tracking-wider flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-coral inline-block"></span>
+              Clip Timeframe
             </h3>
             <p className="text-xs text-olive">
-              Frame-accurate millisecond boundaries. Direct typing, steppers, or playhead alignment.
+              Enter your start and end times, or drag the playhead on the player.
             </p>
           </div>
 
           {/* Dynamic Clip Duration Pill */}
-          <div className="flex items-center space-x-2 bg-lime-subtle border border-lime text-botanical px-3 py-1.5 rounded">
+          <div className="flex items-center space-x-2 bg-lime-subtle border border-lime text-botanical px-3 py-1.5 rounded self-start sm:self-auto">
             <Clock className="w-4 h-4 text-botanical" />
-            <span className="text-xs uppercase font-mono tracking-wider font-semibold">Clip Duration:</span>
+            <span className="text-xs uppercase font-mono tracking-wider font-semibold">Clip Length:</span>
             <span className="font-mono text-sm font-bold text-botanical">
-              {formatTimestamp(clipDuration, true)}
+              {formatTimestamp(clipDuration, false)}
+            </span>
+            <span className="text-[11px] font-mono text-olive">
+              ({formatHumanReadableTime(clipDuration)})
             </span>
           </div>
         </div>
@@ -261,13 +259,13 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
           {/* START TIME FIELD */}
           <div className="p-4 bg-ivory border border-stone rounded">
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-mono font-bold uppercase tracking-wider text-botanical flex items-center space-x-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-coral inline-block" />
-                <span>START TIME (IN POINT)</span>
+              <label className="text-xs font-mono font-bold uppercase tracking-wider text-botanical flex items-center space-x-1.5">
+                <span className="w-2 h-2 rounded-full bg-coral inline-block" />
+                <span>Start Time</span>
               </label>
               <button
                 onClick={setStartToPlayhead}
-                className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface hover:bg-stone text-botanical border border-stone flex items-center space-x-1"
+                className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface hover:bg-stone text-botanical border border-stone flex items-center space-x-1 transition-colors"
                 title="Set Start from Current Playhead"
               >
                 <Crosshair className="w-3 h-3 text-coral" />
@@ -286,7 +284,7 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
                   onKeyDown={(e) => e.key === 'Enter' && handleCommitStart()}
                   onPaste={handlePasteStart}
                   className="w-full pl-3 pr-14 py-2 bg-white border border-stone rounded font-mono font-bold text-base text-botanical tracking-wider focus:border-coral focus:outline-none"
-                  placeholder="00:00:00.000 or 57:58"
+                  placeholder="00:00:00 or 57:58"
                 />
                 {isStartFocused && (
                   <button
@@ -315,18 +313,18 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
                   <button
                     onClick={() => adjustStart(-0.1)}
                     className="px-1.5 py-1 text-[10px] font-mono bg-surface hover:bg-stone border border-stone rounded"
-                    title="-100ms"
+                    title="-0.1 second"
                   >
-                    -100m
+                    -0.1s
                   </button>
                 </div>
                 <div className="flex space-x-1">
                   <button
                     onClick={() => adjustStart(0.1)}
                     className="px-1.5 py-1 text-[10px] font-mono bg-surface hover:bg-stone border border-stone rounded"
-                    title="+100ms"
+                    title="+0.1 second"
                   >
-                    +100m
+                    +0.1s
                   </button>
                   <button
                     onClick={() => adjustStart(1)}
@@ -339,7 +337,13 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
               </div>
             </div>
             <div className="mt-2 flex justify-between items-center text-[11px] font-mono text-olive">
-              <span>e.g. 57:58, 1:02:56, 1.02.56, or HH:MM:SS</span>
+              <span>
+                {parsedStartPreview !== null ? (
+                  <span className="text-botanical font-medium">({formatHumanReadableTime(parsedStartPreview)})</span>
+                ) : (
+                  'e.g. 57:58, 1:02:56, 1.02.56'
+                )}
+              </span>
               <button
                 onClick={() => onSeek(startTime)}
                 className="text-coral hover:underline"
@@ -352,13 +356,13 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
           {/* END TIME FIELD */}
           <div className="p-4 bg-ivory border border-stone rounded">
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-mono font-bold uppercase tracking-wider text-botanical flex items-center space-x-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-coral inline-block" />
-                <span>END TIME (OUT POINT)</span>
+              <label className="text-xs font-mono font-bold uppercase tracking-wider text-botanical flex items-center space-x-1.5">
+                <span className="w-2 h-2 rounded-full bg-coral inline-block" />
+                <span>End Time</span>
               </label>
               <button
                 onClick={setEndToPlayhead}
-                className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface hover:bg-stone text-botanical border border-stone flex items-center space-x-1"
+                className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface hover:bg-stone text-botanical border border-stone flex items-center space-x-1 transition-colors"
                 title="Set End from Current Playhead"
               >
                 <Crosshair className="w-3 h-3 text-coral" />
@@ -377,7 +381,7 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
                   onKeyDown={(e) => e.key === 'Enter' && handleCommitEnd()}
                   onPaste={handlePasteEnd}
                   className="w-full pl-3 pr-14 py-2 bg-white border border-stone rounded font-mono font-bold text-base text-botanical tracking-wider focus:border-coral focus:outline-none"
-                  placeholder="00:00:00.000 or 1.02.56"
+                  placeholder="00:00:00 or 1:01:58"
                 />
                 {isEndFocused && (
                   <button
@@ -406,18 +410,18 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
                   <button
                     onClick={() => adjustEnd(-0.1)}
                     className="px-1.5 py-1 text-[10px] font-mono bg-surface hover:bg-stone border border-stone rounded"
-                    title="-100ms"
+                    title="-0.1 second"
                   >
-                    -100m
+                    -0.1s
                   </button>
                 </div>
                 <div className="flex space-x-1">
                   <button
                     onClick={() => adjustEnd(0.1)}
                     className="px-1.5 py-1 text-[10px] font-mono bg-surface hover:bg-stone border border-stone rounded"
-                    title="+100ms"
+                    title="+0.1 second"
                   >
-                    +100m
+                    +0.1s
                   </button>
                   <button
                     onClick={() => adjustEnd(1)}
@@ -430,7 +434,13 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
               </div>
             </div>
             <div className="mt-2 flex justify-between items-center text-[11px] font-mono text-olive">
-              <span>e.g. 1.02.56, 1:02:56, 57:58, or HH:MM:SS</span>
+              <span>
+                {parsedEndPreview !== null ? (
+                  <span className="text-botanical font-medium">({formatHumanReadableTime(parsedEndPreview)})</span>
+                ) : (
+                  'e.g. 1:01:58, 1.01.58, or 57:58'
+                )}
+              </span>
               <button
                 onClick={() => onSeek(endTime)}
                 className="text-coral hover:underline"
@@ -462,7 +472,7 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
             <span className="text-olive mr-1">Anchor:</span>
             <button
               onClick={() => setPresetAnchor('start-at-playhead')}
-              className={`px-2 py-0.5 rounded border ${
+              className={`px-2 py-0.5 rounded border transition-colors ${
                 presetAnchor === 'start-at-playhead'
                   ? 'bg-botanical text-white border-botanical font-semibold'
                   : 'bg-surface text-botanical border-stone hover:bg-stone'
@@ -472,7 +482,7 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
             </button>
             <button
               onClick={() => setPresetAnchor('center-playhead')}
-              className={`px-2 py-0.5 rounded border ${
+              className={`px-2 py-0.5 rounded border transition-colors ${
                 presetAnchor === 'center-playhead'
                   ? 'bg-botanical text-white border-botanical font-semibold'
                   : 'bg-surface text-botanical border-stone hover:bg-stone'
@@ -482,7 +492,7 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
             </button>
             <button
               onClick={() => setPresetAnchor('end-at-playhead')}
-              className={`px-2 py-0.5 rounded border ${
+              className={`px-2 py-0.5 rounded border transition-colors ${
                 presetAnchor === 'end-at-playhead'
                   ? 'bg-botanical text-white border-botanical font-semibold'
                   : 'bg-surface text-botanical border-stone hover:bg-stone'
@@ -514,7 +524,7 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
         </div>
       </div>
 
-      {/* Action Toolbar: Preview, Loop, Add to Workspace, Quick Export */}
+      {/* Action Toolbar: Preview, Loop, Add to Shelf, Download */}
       <div className="pt-4 border-t border-stone flex flex-wrap items-center justify-between gap-3">
         {/* Playback Controls */}
         <div className="flex items-center space-x-2">
@@ -524,7 +534,7 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
               if (isEndFocused) handleCommitEnd();
               onPreviewSelection();
             }}
-            className="px-3.5 py-2 bg-surface hover:bg-stone border border-stone text-botanical text-xs font-medium rounded flex items-center space-x-1.5 shadow-minimal"
+            className="px-3.5 py-2 bg-surface hover:bg-stone border border-stone text-botanical text-xs font-medium rounded flex items-center space-x-1.5 shadow-minimal transition-colors"
           >
             <Play className="w-3.5 h-3.5 text-coral fill-coral" />
             <span>Preview Selection</span>
@@ -544,14 +554,14 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
           </button>
         </div>
 
-        {/* Clip Name & Save / Export */}
+        {/* Clip Name & Save / Download */}
         <div className="flex items-center space-x-2 flex-1 max-w-md justify-end">
           <input
             type="text"
             value={clipName}
             onChange={(e) => setClipName(e.target.value)}
-            placeholder="Clip Label..."
-            className="px-3 py-2 bg-ivory border border-stone rounded text-xs text-botanical w-40 focus:w-48 transition-all"
+            placeholder="Clip label (optional)..."
+            className="px-3 py-2 bg-ivory border border-stone rounded text-xs text-botanical w-36 focus:w-44 transition-all"
           />
 
           <button
@@ -563,17 +573,18 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
               }
             }}
             disabled={!validation.isValid}
-            className={`px-3.5 py-2 text-xs font-semibold rounded flex items-center space-x-1.5 transition-colors ${
+            className={`px-3 py-2 text-xs font-semibold rounded flex items-center space-x-1.5 transition-colors ${
               validation.isValid
                 ? 'bg-botanical text-white hover:bg-botanical-light'
                 : 'bg-stone text-olive cursor-not-allowed'
             }`}
-            title="Save range to Multi-Clip collection"
+            title="Save range to Multi-Clip shelf"
           >
             <Plus className="w-3.5 h-3.5 text-lime" />
-            <span>Add Range</span>
+            <span>Save Clip</span>
           </button>
 
+          {/* 1-Click Direct Download Button */}
           <button
             onClick={() => {
               if (isStartFocused) handleCommitStart();
@@ -582,16 +593,38 @@ export const TimeframeControls: React.FC<TimeframeControlsProps> = ({
                 onQuickExport();
               }
             }}
-            disabled={!validation.isValid}
-            className={`px-4 py-2 text-xs font-semibold rounded flex items-center space-x-1.5 shadow-minimal transition-colors ${
-              validation.isValid
-                ? 'bg-coral text-white hover:bg-coral-hover'
+            disabled={!validation.isValid || isDownloading}
+            className={`px-4 py-2 text-xs font-semibold rounded flex items-center space-x-1.5 shadow-minimal transition-all cursor-pointer ${
+              isDownloading
+                ? 'bg-coral/80 text-white cursor-wait'
+                : validation.isValid
+                ? 'bg-coral text-white hover:bg-coral-hover active:scale-[0.98]'
                 : 'bg-stone text-olive cursor-not-allowed'
             }`}
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>Export Clip</span>
+            {isDownloading ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Clipping Video...</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-3.5 h-3.5" />
+                <span>Download Clip</span>
+              </>
+            )}
           </button>
+
+          {/* More options button */}
+          {onOpenOptions && (
+            <button
+              onClick={onOpenOptions}
+              className="p-2 bg-surface hover:bg-stone/30 border border-stone rounded text-olive hover:text-botanical transition-colors"
+              title="More export options (record in browser, link file)"
+            >
+              <MoreVertical className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
     </div>
