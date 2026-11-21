@@ -45,6 +45,9 @@ export const ExportQueueView: React.FC<ExportQueueViewProps> = ({
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    if (!job.outputUrl) {
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
   };
 
   const handleDownloadAllZip = async () => {

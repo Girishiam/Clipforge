@@ -55,5 +55,9 @@ describe('Universal Video URL Parser', () => {
 
     const invalidRes = parseVideoUrl('not-a-valid-url');
     expect(invalidRes.isValid).toBe(false);
+
+    const genericWebpage = parseVideoUrl('https://example.com/some/article');
+    expect(genericWebpage.isValid).toBe(false);
+    expect(genericWebpage.platform).toBe('unknown');
   });
 });

@@ -320,8 +320,17 @@ export function parseBulkTimeframes(
   };
 }
 
+function sanitizeCSVCell(val: string): string {
+  let clean = val.replace(/"/g, '""');
+  // Prevent CSV formula injection in spreadsheet software
+  if (/^[=+\-@\t\r]/.test(clean)) {
+    clean = `'${clean}`;
+  }
+  return `"${clean}"`;
+}
+
 /**
- * Export clips to CSV format
+ * Export clips to CSV format with formula injection protection
  */
 export function exportClipsToCSV(clips: ClipRange[], sourceTitle: string): string {
   const header = ['Clip Name', 'Start Timecode', 'End Timecode', 'Start Seconds', 'End Seconds', 'Duration Timecode', 'Duration Seconds', 'Source'];
@@ -329,14 +338,14 @@ export function exportClipsToCSV(clips: ClipRange[], sourceTitle: string): strin
 
   clips.forEach(clip => {
     const row = [
-      `"${clip.name.replace(/"/g, '""')}"`,
+      sanitizeCSVCell(clip.name),
       formatTimestamp(clip.start),
       formatTimestamp(clip.end),
       clip.start.toFixed(3),
       clip.end.toFixed(3),
       formatTimestamp(clip.duration),
       clip.duration.toFixed(3),
-      `"${sourceTitle.replace(/"/g, '""')}"`,
+      sanitizeCSVCell(sourceTitle),
     ];
     lines.push(row.join(','));
   });

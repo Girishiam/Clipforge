@@ -140,4 +140,16 @@ describe('CSV Export Generation', () => {
     expect(csv).toContain('"Hook",00:00:10.000,00:00:25.000');
     expect(csv).toContain('"Quote, with comma"');
   });
+
+  it('neutralizes CSV formula injection characters', () => {
+    const maliciousClips: ClipRange[] = [
+      { id: '1', name: '=1+1', start: 0, end: 10, duration: 10 },
+      { id: '2', name: '@SUM(A1:A10)', start: 10, end: 20, duration: 10 },
+      { id: '3', name: '-calc', start: 20, end: 30, duration: 10 },
+    ];
+    const csv = exportClipsToCSV(maliciousClips, 'Master Video');
+    expect(csv).toContain('"\'=1+1"');
+    expect(csv).toContain('"\'@SUM(A1:A10)"');
+    expect(csv).toContain('"\' -calc"'.replace(' -', '-'));
+  });
 });

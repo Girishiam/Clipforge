@@ -139,6 +139,9 @@ export const App: React.FC = () => {
 
   // Add Source handler (triggered instantly when URL pasted or file dropped)
   const handleSourceLoaded = (newSource: ClipSource) => {
+    if (activeSource?.objectUrl && activeSource.objectUrl !== newSource.objectUrl) {
+      try { URL.revokeObjectURL(activeSource.objectUrl); } catch {}
+    }
     setActiveSource(newSource);
     setDuration(newSource.duration);
     setStartTime(0);
@@ -172,7 +175,8 @@ export const App: React.FC = () => {
     try {
       const ytIframe = document.querySelector('#yt-player-target') as HTMLIFrameElement;
       if (ytIframe && ytIframe.contentWindow) {
-        ytIframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'seekTo', args: [start, true] }), '*');
+        const targetOrigin = ytIframe.src ? new URL(ytIframe.src).origin : 'https://www.youtube.com';
+        ytIframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'seekTo', args: [start, true] }), targetOrigin);
       }
     } catch {}
     setCurrentTime(start);
@@ -186,7 +190,8 @@ export const App: React.FC = () => {
     try {
       const ytIframe = document.querySelector('#yt-player-target') as HTMLIFrameElement;
       if (ytIframe && ytIframe.contentWindow) {
-        ytIframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'seekTo', args: [time, true] }), '*');
+        const targetOrigin = ytIframe.src ? new URL(ytIframe.src).origin : 'https://www.youtube.com';
+        ytIframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'seekTo', args: [time, true] }), targetOrigin);
       }
     } catch {}
   };
@@ -199,7 +204,8 @@ export const App: React.FC = () => {
     try {
       const ytIframe = document.querySelector('#yt-player-target') as HTMLIFrameElement;
       if (ytIframe && ytIframe.contentWindow) {
-        ytIframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), '*');
+        const targetOrigin = ytIframe.src ? new URL(ytIframe.src).origin : 'https://www.youtube.com';
+        ytIframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'playVideo', args: [] }), targetOrigin);
       }
     } catch {}
   };

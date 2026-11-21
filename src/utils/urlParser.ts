@@ -136,16 +136,17 @@ export function parseVideoUrl(input: string): ParsedUrlInfo {
     }
 
     // 4. Direct video media file
-    const isDirectMedia = /\.(mp4|webm|ogg|mov|m4v)(\?.*)?$/i.test(pathname);
-    if (isDirectMedia || url.protocol.startsWith('http')) {
-      const fileName = pathname.split('/').pop() || 'Remote Media';
+    const isDirectMedia = /\.(mp4|webm|ogg|mov|m4v)(\?.*)?$/i.test(pathname) ||
+                          /\.(mp4|webm|ogg|mov|m4v)/i.test(url.search);
+    if (isDirectMedia) {
+      const fileName = pathname.split('/').pop()?.split('?')[0] || 'Remote Media';
       return {
         platform: 'direct_url',
         isValid: true,
         directUrl: trimmed,
         title: decodeURIComponent(fileName),
         isEmbedOnly: false,
-        statusNote: 'Direct media stream detected. Full local processing and clipping available (subject to CORS policy).',
+        statusNote: 'Direct media stream detected. Full local processing and clipping available.',
         badgeLabel: 'Direct Stream',
       };
     }
