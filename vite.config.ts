@@ -22,7 +22,7 @@ export default defineConfig({
             return;
           }
 
-          const processClipRequest = async (url: string, start: number | string, end: number | string, title?: string) => {
+          const processClipRequest = async (url: string, start: number | string, end: number | string, title?: string, quality?: string) => {
             if (!url || start === undefined || end === undefined) {
               res.statusCode = 400;
               res.setHeader('Content-Type', 'application/json');
@@ -31,20 +31,22 @@ export default defineConfig({
             }
 
             const cleanTitle = (title || 'clip').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40);
+            const targetQuality = quality || '4k';
             const tempDir = os.tmpdir();
             const tempFileName = `${cleanTitle}_${Date.now()}.mp4`;
             const tempFilePath = path.join(tempDir, tempFileName);
 
             const scriptPath = path.resolve(__dirname, 'scripts', 'clip_engine.py');
 
-            console.log(`[clip-api] Processing clip from: ${url} (${start}s to ${end}s) -> ${tempFilePath}`);
+            console.log(`[clip-api] Processing clip (${targetQuality}): ${url} (${start}s to ${end}s) -> ${tempFilePath}`);
 
             const pyProc = spawn('python', [
               scriptPath,
               '--url', String(url),
               '--start', String(start),
               '--end', String(end),
-              '--output', tempFilePath
+              '--output', tempFilePath,
+              '--quality', targetQuality
             ]);
 
             let stderr = '';
@@ -101,14 +103,15 @@ export default defineConfig({
             const start = parsedUrl.searchParams.get('start') || '0';
             const end = parsedUrl.searchParams.get('end') || '10';
             const title = parsedUrl.searchParams.get('title') || 'clip';
-            await processClipRequest(url, start, end, title);
+            const quality = parsedUrl.searchParams.get('quality') || '4k';
+            await processClipRequest(url, start, end, title, quality);
           } else if (req.method === 'POST') {
             let body = '';
             req.on('data', chunk => { body += chunk; });
             req.on('end', async () => {
               try {
                 const parsed = JSON.parse(body || '{}');
-                await processClipRequest(parsed.url, parsed.start, parsed.end, parsed.title);
+                await processClipRequest(parsed.url, parsed.start, parsed.end, parsed.title, parsed.quality || '4k');
               } catch (e: any) {
                 res.statusCode = 400;
                 res.setHeader('Content-Type', 'application/json');

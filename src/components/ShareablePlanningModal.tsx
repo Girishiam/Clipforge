@@ -112,6 +112,7 @@ export const ShareablePlanningModal: React.FC<ShareablePlanningModalProps> = ({
           start: firstClip.start,
           end: firstClip.end,
           title: cleanTitle,
+          quality: '4k',
         }),
       });
 

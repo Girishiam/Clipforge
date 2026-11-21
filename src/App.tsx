@@ -245,6 +245,7 @@ export const App: React.FC = () => {
             start: cStart,
             end: cEnd,
             title: cName,
+            quality: currentPreset.resolution === '4k' ? '4k' : 'best',
           }),
         });
 
@@ -315,6 +316,7 @@ export const App: React.FC = () => {
               start: c.start,
               end: c.end,
               title: c.name,
+              quality: currentPreset.resolution === '4k' ? '4k' : 'best',
             }),
           });
           if (response.ok) {

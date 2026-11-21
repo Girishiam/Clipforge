@@ -23,6 +23,7 @@ def main():
     parser.add_argument("--start", required=True, help="Start time in seconds or timecode")
     parser.add_argument("--end", required=True, help="End time in seconds or timecode")
     parser.add_argument("--output", required=True, help="Output MP4 file path")
+    parser.add_argument("--quality", default="4k", help="Target resolution quality: '4k', '1080p', or 'best'")
 
     args = parser.parse_args()
 
@@ -30,13 +31,19 @@ def main():
     end_str = to_time_str(args.end)
     section_spec = f"*{start_str}-{end_str}"
 
-    print(f"[clip_engine] Clipping section {section_spec} from '{args.url}' -> '{args.output}'", flush=True)
+    # Determine format spec (4K vs 1080p)
+    if args.quality in ("4k", "2160p", "best"):
+        format_spec = "bestvideo[height<=2160]+bestaudio/best[height<=2160]/bestvideo+bestaudio/best"
+    else:
+        format_spec = "bestvideo[height<=1080]+bestaudio/best[height<=1080]/bestvideo+bestaudio/best"
+
+    print(f"[clip_engine] Clipping section {section_spec} ({args.quality}) from '{args.url}' -> '{args.output}'", flush=True)
 
     cmd = [
         sys.executable, "-m", "yt_dlp",
         "--download-sections", section_spec,
         "--force-keyframes-at-cuts",
-        "-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/bestvideo+bestaudio/best",
+        "-f", format_spec,
         "--merge-output-format", "mp4",
         args.url,
         "-o", args.output,
